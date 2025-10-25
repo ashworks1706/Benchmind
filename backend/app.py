@@ -1,21 +1,73 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, redirect
 from flask_cors import CORS
 from dotenv import load_dotenv
 import os
 import uuid
 import time
 from threading import Thread
+import jwt
+import requests
+from datetime import datetime, timedelta
+from sqlalchemy import func
 
 from services.github_scraper import GitHubScraper
 from services.agent_parser import AgentParser
 from services.test_generator import TestGenerator
 from services.code_editor import CodeEditor
 from services.cache_manager import CacheManager
+from services.encryption import encrypt_token, decrypt_token
+
+from database import get_db, init_db
+from models import User, Project, Analysis, GitHubRepositoryCache
 
 load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
+
+# Initialize database on startup
+try:
+    init_db()
+except Exception as e:
+    print(f"Note: Database initialization: {e}")
+
+JWT_SECRET = os.getenv('JWT_SECRET', 'dev-secret')
+JWT_ALGORITHM = os.getenv('JWT_ALGORITHM', 'HS256')
+JWT_EXPIRE_DAYS = int(os.getenv('JWT_EXPIRE_DAYS', '7'))
+
+def _create_jwt(payload: dict) -> str:
+    to_encode = payload.copy()
+    expire = datetime.utcnow() + timedelta(days=JWT_EXPIRE_DAYS)
+    to_encode.update({ 'exp': expire })
+    return jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+def _decode_jwt(token: str) -> dict:
+    try:
+        return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except Exception:
+        return {}
+
+def _get_auth_user():
+    """Get authenticated user from JWT token"""
+    auth = request.headers.get('Authorization')
+    if not auth:
+        return None
+    if auth.startswith('Bearer '):
+        token = auth.split(' ', 1)[1]
+    else:
+        token = auth
+    data = _decode_jwt(token)
+    if not data or not data.get('id'):
+        return None
+    
+    # Fetch user from database
+    with get_db() as db:
+        user = db.query(User).filter(User.id == data.get('id')).first()
+        if user:
+            # Decrypt access token for use
+            if user.github_access_token_encrypted:
+                user.decrypted_token = decrypt_token(user.github_access_token_encrypted)
+        return user
 
 # Initialize services
 github_scraper = GitHubScraper()
@@ -147,6 +199,297 @@ def run_analysis_async(analysis_id, github_url):
 def health_check():
     """Health check endpoint"""
     return jsonify({'status': 'healthy', 'message': 'Backend is running'}), 200
+
+
+# --- GitHub OAuth & User Endpoints (prototype) ---
+@app.route('/auth/github/login', methods=['GET'])
+def github_login():
+    """Redirect user to GitHub OAuth page"""
+    client_id = os.getenv('GITHUB_OAUTH_CLIENT_ID')
+    redirect_uri = os.getenv('GITHUB_OAUTH_CALLBACK') or os.getenv('GITHUB_OAUTH_REDIRECT')
+    if not client_id or not redirect_uri:
+        return jsonify({'error': 'OAuth not configured. Set GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CALLBACK in env.'}), 500
+
+    state = str(uuid.uuid4())
+    # In production store state in DB or session
+    params = {
+        'client_id': client_id,
+        'redirect_uri': redirect_uri,
+        'scope': 'read:user repo',
+        'state': state,
+        'allow_signup': 'true'
+    }
+    github_auth = 'https://github.com/login/oauth/authorize'
+    url = requests.Request('GET', github_auth, params=params).prepare().url
+    # Redirect the client to GitHub OAuth URL
+    from flask import redirect
+    return redirect(url)
+
+
+@app.route('/auth/github/callback', methods=['GET'])
+def github_callback():
+    """Exchange code for token and return user + JWT (for frontend to store)"""
+    code = request.args.get('code')
+    state = request.args.get('state')
+    if not code:
+        return jsonify({'error': 'Missing code'}), 400
+
+    client_id = os.getenv('GITHUB_OAUTH_CLIENT_ID')
+    client_secret = os.getenv('GITHUB_OAUTH_CLIENT_SECRET')
+    if not client_id or not client_secret:
+        return jsonify({'error': 'OAuth client id/secret not configured'}), 500
+
+    token_url = 'https://github.com/login/oauth/access_token'
+    headers = {'Accept': 'application/json'}
+    resp = requests.post(token_url, data={
+        'client_id': client_id,
+        'client_secret': client_secret,
+        'code': code
+    }, headers=headers)
+    if resp.status_code != 200:
+        return jsonify({'error': 'Failed to fetch access token', 'detail': resp.text}), 500
+    token_data = resp.json()
+    access_token = token_data.get('access_token')
+    if not access_token:
+        return jsonify({'error': 'No access token returned', 'detail': token_data}), 500
+
+    # Fetch user info
+    user_resp = requests.get('https://api.github.com/user', headers={'Authorization': f'token {access_token}'})
+    if user_resp.status_code != 200:
+        return jsonify({'error': 'Failed to fetch user info', 'detail': user_resp.text}), 500
+    gh_user = user_resp.json()
+
+    # Store or update user in database
+    github_id = str(gh_user.get('id'))
+    
+    with get_db() as db:
+        user = db.query(User).filter(User.github_id == github_id).first()
+        
+        if not user:
+            # Create new user
+            user = User(
+                github_id=github_id,
+                username=gh_user.get('login'),
+                email=gh_user.get('email'),
+                avatar_url=gh_user.get('avatar_url'),
+                github_access_token_encrypted=encrypt_token(access_token)
+            )
+            db.add(user)
+            db.flush()  # Get the ID
+        else:
+            # Update existing user
+            user.username = gh_user.get('login')
+            user.email = gh_user.get('email')
+            user.avatar_url = gh_user.get('avatar_url')
+            user.github_access_token_encrypted = encrypt_token(access_token)
+            user.updated_at = datetime.utcnow()
+        
+        db.commit()
+        
+        # Create JWT for frontend
+        token = _create_jwt({
+            'id': user.id,
+            'github_id': github_id,
+            'username': user.username
+        })
+        
+        # Return user data with unencrypted token
+        user_data = user.to_dict()
+        user_data['accessToken'] = access_token  # Frontend needs this
+        
+        return jsonify({'user': user_data, 'userToken': token, 'token': token}), 200
+
+
+@app.route('/auth/github/repos', methods=['GET'])
+def list_user_repos():
+    """Return repositories for authenticated user (with caching)"""
+    user = _get_auth_user()
+    if not user:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    access_token = getattr(user, 'decrypted_token', None)
+    if not access_token:
+        return jsonify({'error': 'No stored access token for user'}), 400
+
+    # Check cache first (repos cached within last hour)
+    with get_db() as db:
+        cached_repos = db.query(GitHubRepositoryCache).filter(
+            GitHubRepositoryCache.user_id == user.id,
+            GitHubRepositoryCache.cached_at > datetime.utcnow() - timedelta(hours=1)
+        ).all()
+        
+        if cached_repos:
+            return jsonify([repo.to_dict() for repo in cached_repos]), 200
+
+    # Fetch from GitHub API
+    repos = []
+    try:
+        page = 1
+        while True:
+            r = requests.get('https://api.github.com/user/repos', params={'per_page': 100, 'page': page}, headers={'Authorization': f'token {access_token}'})
+            if r.status_code != 200:
+                break
+            page_data = r.json()
+            if not page_data:
+                break
+            repos.extend(page_data)
+            page += 1
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+    # Cache repos in database
+    with get_db() as db:
+        # Clear old cache for this user
+        db.query(GitHubRepositoryCache).filter(GitHubRepositoryCache.user_id == user.id).delete()
+        
+        # Add new cache entries
+        simplified = []
+        for r in repos:
+            cache_entry = GitHubRepositoryCache(
+                id=r.get('id'),
+                user_id=user.id,
+                name=r.get('name'),
+                full_name=r.get('full_name'),
+                description=r.get('description'),
+                html_url=r.get('html_url'),
+                private=r.get('private', False),
+                language=r.get('language'),
+                stargazers_count=r.get('stargazers_count', 0),
+                updated_at=datetime.fromisoformat(r.get('updated_at').replace('Z', '+00:00')) if r.get('updated_at') else None
+            )
+            db.add(cache_entry)
+            simplified.append(cache_entry.to_dict())
+        
+        db.commit()
+    
+    return jsonify(simplified), 200
+
+
+@app.route('/auth/github/repos/refresh', methods=['POST'])
+def refresh_user_repos():
+    # For now just call list_user_repos (no caching layer implemented yet)
+    return list_user_repos()
+
+
+# --- Project Management Endpoints (Database) ---
+@app.route('/projects', methods=['GET'])
+def list_projects():
+    user = _get_auth_user()
+    if not user:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    with get_db() as db:
+        projects = db.query(Project).filter(Project.user_id == user.id).all()
+        return jsonify([p.to_dict() for p in projects]), 200
+
+
+@app.route('/projects', methods=['POST'])
+def create_project():
+    user = _get_auth_user()
+    if not user:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    data = request.json or {}
+    name = data.get('name')
+    repo_url = data.get('repoUrl') or data.get('repo_url') or data.get('repo')
+    description = data.get('description', '')
+    config = data.get('config', {})
+
+    if not name or not repo_url:
+        return jsonify({'error': 'name and repoUrl are required'}), 400
+
+    # Parse repo owner and name from URL
+    parts = repo_url.rstrip('/').split('/')
+    repo_name = parts[-1]
+    repo_owner = parts[-2] if len(parts) >= 2 else ''
+    
+    with get_db() as db:
+        project = Project(
+            user_id=user.id,
+            name=name,
+            description=description,
+            repo_url=repo_url,
+            repo_name=repo_name,
+            repo_owner=repo_owner,
+            config=config
+        )
+        db.add(project)
+        db.commit()
+        db.refresh(project)
+        
+        return jsonify(project.to_dict()), 201
+
+
+@app.route('/projects/<project_id>', methods=['GET'])
+def get_project(project_id):
+    user = _get_auth_user()
+    if not user:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    with get_db() as db:
+        project = db.query(Project).filter(
+            Project.id == project_id,
+            Project.user_id == user.id
+        ).first()
+        
+        if not project:
+            return jsonify({'error': 'Project not found or unauthorized'}), 404
+        
+        return jsonify(project.to_dict()), 200
+
+
+@app.route('/projects/<project_id>', methods=['PATCH'])
+def update_project(project_id):
+    user = _get_auth_user()
+    if not user:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    with get_db() as db:
+        project = db.query(Project).filter(
+            Project.id == project_id,
+            Project.user_id == user.id
+        ).first()
+        
+        if not project:
+            return jsonify({'error': 'Project not found or unauthorized'}), 404
+
+        data = request.json or {}
+        # Only allow updating certain fields
+        if 'name' in data:
+            project.name = data['name']
+        if 'description' in data:
+            project.description = data['description']
+        if 'config' in data:
+            project.config = data['config']
+        
+        project.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(project)
+        
+        return jsonify(project.to_dict()), 200
+
+
+@app.route('/projects/<project_id>', methods=['DELETE'])
+def delete_project(project_id):
+    user = _get_auth_user()
+    if not user:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    with get_db() as db:
+        project = db.query(Project).filter(
+            Project.id == project_id,
+            Project.user_id == user.id
+        ).first()
+        
+        if not project:
+            return jsonify({'error': 'Project not found or unauthorized'}), 404
+        
+        db.delete(project)
+        db.commit()
+        
+        return jsonify({'status': 'deleted'}), 200
+
+
 
 @app.route('/api/analyze-repo', methods=['POST'])
 def analyze_repository():

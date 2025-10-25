@@ -8,3 +8,8 @@ langchain-community==0.0.10
 beautifulsoup4==4.12.2
 PyGithub==2.1.1
 gitpython==3.1.40
+PyJWT==2.8.0
+SQLAlchemy==2.0.23
+psycopg2-binary==2.9.9
+cryptography==41.0.7
+alembic==1.13.1
