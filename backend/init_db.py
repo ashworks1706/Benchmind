@@ -9,10 +9,11 @@ import os
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from database import init_db, drop_db
+# Load environment variables BEFORE importing database
 from dotenv import load_dotenv
-
 load_dotenv()
+
+from database import init_db, drop_db
 
 if __name__ == '__main__':
     import argparse

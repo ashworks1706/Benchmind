@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { authService } from '@/lib/auth';
 
 export default function AuthCallbackPage() {
   const router = useRouter();
@@ -10,30 +9,45 @@ export default function AuthCallbackPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const code = searchParams.get('code');
     const errorParam = searchParams.get('error');
+    const token = searchParams.get('token');
+    const accessToken = searchParams.get('access_token');
 
-    if (errorParam) {
-      setError('Authentication failed. Please try again.');
-      setTimeout(() => router.push('/login'), 3000);
-      return;
-    }
+    const handleAuth = async () => {
+      if (errorParam) {
+        setError(`Authentication failed: ${errorParam}. Please try again.`);
+        setTimeout(() => router.push('/login'), 3000);
+        return;
+      }
 
-    if (!code) {
-      setError('No authentication code received.');
-      setTimeout(() => router.push('/login'), 3000);
-      return;
-    }
+      if (!token || !accessToken) {
+        setError('No authentication data received.');
+        setTimeout(() => router.push('/login'), 3000);
+        return;
+      }
 
-    authService.handleCallback(code)
-      .then(() => {
+      // Store tokens in localStorage
+      try {
+        localStorage.setItem('accessToken', accessToken);
+        // Decode and store user data from token
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const user = {
+          id: payload.id,
+          githubId: payload.github_id,
+          username: payload.username,
+          accessToken: accessToken
+        };
+        localStorage.setItem('user', JSON.stringify(user));
+        
         router.push('/dashboard');
-      })
-      .catch((err) => {
+      } catch (err) {
         console.error('Auth error:', err);
         setError('Failed to complete authentication.');
         setTimeout(() => router.push('/login'), 3000);
-      });
+      }
+    };
+
+    handleAuth();
   }, [searchParams, router]);
 
   if (error) {

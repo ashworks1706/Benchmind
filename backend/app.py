@@ -228,16 +228,24 @@ def github_login():
 
 @app.route('/auth/github/callback', methods=['GET'])
 def github_callback():
-    """Exchange code for token and return user + JWT (for frontend to store)"""
+    """Exchange code for token and redirect to frontend with user data"""
     code = request.args.get('code')
     state = request.args.get('state')
+    error = request.args.get('error')
+    
+    frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+    
+    # Handle OAuth errors
+    if error:
+        return redirect(f'{frontend_url}/auth/callback?error={error}')
+    
     if not code:
-        return jsonify({'error': 'Missing code'}), 400
+        return redirect(f'{frontend_url}/auth/callback?error=no_code')
 
     client_id = os.getenv('GITHUB_OAUTH_CLIENT_ID')
     client_secret = os.getenv('GITHUB_OAUTH_CLIENT_SECRET')
     if not client_id or not client_secret:
-        return jsonify({'error': 'OAuth client id/secret not configured'}), 500
+        return redirect(f'{frontend_url}/auth/callback?error=oauth_not_configured')
 
     token_url = 'https://github.com/login/oauth/access_token'
     headers = {'Accept': 'application/json'}
@@ -247,57 +255,59 @@ def github_callback():
         'code': code
     }, headers=headers)
     if resp.status_code != 200:
-        return jsonify({'error': 'Failed to fetch access token', 'detail': resp.text}), 500
+        return redirect(f'{frontend_url}/auth/callback?error=token_exchange_failed')
+    
     token_data = resp.json()
     access_token = token_data.get('access_token')
     if not access_token:
-        return jsonify({'error': 'No access token returned', 'detail': token_data}), 500
+        return redirect(f'{frontend_url}/auth/callback?error=no_access_token')
 
     # Fetch user info
     user_resp = requests.get('https://api.github.com/user', headers={'Authorization': f'token {access_token}'})
     if user_resp.status_code != 200:
-        return jsonify({'error': 'Failed to fetch user info', 'detail': user_resp.text}), 500
+        return redirect(f'{frontend_url}/auth/callback?error=user_fetch_failed')
     gh_user = user_resp.json()
 
     # Store or update user in database
     github_id = str(gh_user.get('id'))
     
-    with get_db() as db:
-        user = db.query(User).filter(User.github_id == github_id).first()
-        
-        if not user:
-            # Create new user
-            user = User(
-                github_id=github_id,
-                username=gh_user.get('login'),
-                email=gh_user.get('email'),
-                avatar_url=gh_user.get('avatar_url'),
-                github_access_token_encrypted=encrypt_token(access_token)
-            )
-            db.add(user)
-            db.flush()  # Get the ID
-        else:
-            # Update existing user
-            user.username = gh_user.get('login')
-            user.email = gh_user.get('email')
-            user.avatar_url = gh_user.get('avatar_url')
-            user.github_access_token_encrypted = encrypt_token(access_token)
-            user.updated_at = datetime.utcnow()
-        
-        db.commit()
-        
-        # Create JWT for frontend
-        token = _create_jwt({
-            'id': user.id,
-            'github_id': github_id,
-            'username': user.username
-        })
-        
-        # Return user data with unencrypted token
-        user_data = user.to_dict()
-        user_data['accessToken'] = access_token  # Frontend needs this
-        
-        return jsonify({'user': user_data, 'userToken': token, 'token': token}), 200
+    try:
+        with get_db() as db:
+            user = db.query(User).filter(User.github_id == github_id).first()
+            
+            if not user:
+                # Create new user
+                user = User(
+                    github_id=github_id,
+                    username=gh_user.get('login'),
+                    email=gh_user.get('email'),
+                    avatar_url=gh_user.get('avatar_url'),
+                    github_access_token_encrypted=encrypt_token(access_token)
+                )
+                db.add(user)
+                db.flush()  # Get the ID
+            else:
+                # Update existing user
+                user.username = gh_user.get('login')
+                user.email = gh_user.get('email')
+                user.avatar_url = gh_user.get('avatar_url')
+                user.github_access_token_encrypted = encrypt_token(access_token)
+                user.updated_at = datetime.utcnow()
+            
+            db.commit()
+            
+            # Create JWT for frontend
+            token = _create_jwt({
+                'id': user.id,
+                'github_id': github_id,
+                'username': user.username
+            })
+            
+            # Redirect to frontend with code (frontend will call backend to get user data)
+            return redirect(f'{frontend_url}/auth/callback?code={code}&token={token}&access_token={access_token}')
+    
+    except Exception as e:
+        return redirect(f'{frontend_url}/auth/callback?error=database_error')
 
 
 @app.route('/auth/github/repos', methods=['GET'])
