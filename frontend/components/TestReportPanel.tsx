@@ -102,7 +102,7 @@ const METRIC_DEFINITIONS = {
 };
 
 export default function TestReportPanel() {
-  const { testReport, setPanelView, addStatusMessage, agentData, addQueuedChange } = useStore();
+  const { testReport, setPanelView, addStatusMessage, agentData, addQueuedChange, highlightElements, clearHighlights } = useStore();
   const [expandedMetric, setExpandedMetric] = useState<string | null>(null);
 
   const handleBackToTests = () => {
@@ -184,6 +184,41 @@ export default function TestReportPanel() {
     if (!agentData) return;
 
     try {
+      // Extract agent/tool ID from file path
+      const filePath = recommendation.fix.file_path;
+      let elementIdToHighlight: string | null = null;
+
+      // Try to find the agent/tool that matches this file path
+      if (agentData.agents) {
+        const matchingAgent = agentData.agents.find((agent: any) => 
+          agent.file_path === filePath || 
+          filePath.includes(agent.name.toLowerCase())
+        );
+        if (matchingAgent) {
+          elementIdToHighlight = matchingAgent.id;
+        }
+      }
+
+      if (agentData.tools && !elementIdToHighlight) {
+        const matchingTool = agentData.tools.find((tool: any) => 
+          tool.file_path === filePath || 
+          filePath.includes(tool.name.toLowerCase())
+        );
+        if (matchingTool) {
+          elementIdToHighlight = matchingTool.id;
+        }
+      }
+
+      // Highlight the element on canvas (use regular highlight, not error)
+      if (elementIdToHighlight) {
+        highlightElements([elementIdToHighlight]);
+        
+        // Auto-clear highlight after 3 seconds
+        setTimeout(() => {
+          clearHighlights();
+        }, 3000);
+      }
+
       // Queue the fix instead of applying immediately
       addQueuedChange({
         type: 'fix',
