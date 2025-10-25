@@ -17,12 +17,25 @@ if not command -v psql &> /dev/null
     echo "⚠️  PostgreSQL is not installed."
     echo "   Please install PostgreSQL:"
     echo "   - macOS: brew install postgresql"
-    echo "   - Ubuntu/Debian: sudo apt install postgresql postgresql-contrib"
-    echo "   - Fedora: sudo dnf install postgresql-server postgresql-contrib"
+    echo "   - Ubuntu/Debian: sudo apt install postgresql postgresql-contrib libpq-dev"
+    echo "   - Fedora: sudo dnf install postgresql-server postgresql-contrib postgresql-devel"
     exit 1
 end
 
 echo "✅ PostgreSQL found: "(psql --version)
+
+# Check for pg_config (required for psycopg2)
+if not command -v pg_config &> /dev/null
+    echo "⚠️  pg_config is not installed (required for PostgreSQL driver)."
+    echo "   Please install PostgreSQL development headers:"
+    echo "   - macOS: brew install postgresql (should include pg_config)"
+    echo "   - Ubuntu/Debian: sudo apt install libpq-dev"
+    echo "   - Fedora: sudo dnf install postgresql-devel"
+    echo "   - Arch: sudo pacman -S postgresql-libs"
+    exit 1
+end
+
+echo "✅ pg_config found: "(pg_config --version)
 
 # Create virtual environment if it doesn't exist
 if not test -d "venv"
