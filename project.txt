@@ -1,0 +1,27 @@
+a llm complete agentic
+
+A LLM complete agentic pipeline for debugging real time applications and fixing itself. you can choose to organize rag db as you want all collection names and basically the design as you want.
+
+User has its langchain agents codebase -> uploads to github -> comes to our platform and adds their github repo, then we fetch their entire github repo and their all code and perform these layer checks one by one.
+
+We show some kind of sidebar on the frontend that will show progress, first we will act as Code quality verification layer -> we run three agents each specializing in code syntax errors, library errors, dependency etc errors off the top by just looking, and each agent adds their summary, if any part the program is broken, it should not proceed and ask human to fix it or display a suggestion and automatically apply that fix to that part of code, one agent will also specialize in detecting the flow of program, out of the code and understand whats going on in them.
+
+Then those agents and chain defined the lang chain files from the codebase need to be also added to frontend ui in form of connected node, on clicking on any of these nodes, it should show their objective, their tools, their hyperparameters, and other configurations, these should be directly pointing to the code of their programs, basically we’re displaying visual block agents instead of code while its pointing to the code, the visual on sidebar will show settings that can be tuned, if anything human tunes, the ai will apply that settings in code as well.
+
+Now the user can see basically see their codebase represented in form of block code interactive where the sidebar will display manual things user can tune or something the ai will edit the code in background if user edits something.
+
+The agents display on frontend UI will have all these description about their tools, hyperparameters, decisions, other configurations set by the main agent in form of guide docs for each agent in rag db A.
+
+On frontend, those agents show up as UI and user can choose to edit or tweak those agents.
+
+⸻
+
+Once user hits strength test, on the UI each agent should have a strength test logs at the right panel that similarly appears for tweaking agents, the strength test should be basically a separate specialized agent trying to prompt inject the agents of project, any issues showing up should show up in the right panel in form of checklist happening showing the progress, otherwise it gets useful information as guidance from these tests for each agent and adds in collection rag db for each agent to add more context about those agents historically.
+
+Once user hits general reasoning test, on the UI each agent should have a reasoning test logs at the right panel that similarly appears for tweaking agents, the strength test should be basically a separate specialized agent trying to have test cases for demonstrating reasoning of the agents of project given their description, any issues showing up should show up in the right panel in form of checklist happening showing the progress, otherwise it gets useful information as guidance from these tests for each agent and adds in rag db A for each agent to add more context about those agents historically.
+
+Once user hits mathematical reasoning test, on the UI each agent should have a reasoning test logs at the right panel that similarly appears for tweaking agents, the strength test should be basically a separate specialized agent trying to have test cases for demonstrating mathematical reasoning of the agents of project given their description, any issues showing up should show up in the right panel in form of checklist happening showing the progress, otherwise it gets useful information as guidance from these tests for each agent and adds in rag db A for each agent to add more context about those agents historically.
+
+Once user hits collaboration test, on the UI with all agents parallel should have a parallel test logs at the right panel that similarly appears for tweaking agents, any issues showing up should show up in the right panel in form of checklist happening showing the progress, otherwise it gets useful information as guidance from these tests for each agent and adds in rag db A for each agent to add more context about those agents historically.
+
+Then once user deploys it, our agents in real time can have normal webchat UI to talk to agents like normally a user, while at the dashboard agents logs will be measured in real time, if any error or wrong tool call, or wrong reasoning pattern or any kind of error or warning is detected which agents can work on together while access previous histories in rag database and how it works etc and how it can be fixed and then display the fix to the user, etc.
