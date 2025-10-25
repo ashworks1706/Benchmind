@@ -114,7 +114,7 @@ export function Dashboard() {
           }
           
           // Check if completed
-          if (statusData.status === 'completed' && statusData.data) {
+          if (statusData.status === 'success' && statusData.data) {
             clearInterval(pollInterval);
             
             setAgentData(statusData.data, githubUrl, statusData.from_cache);

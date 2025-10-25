@@ -35,7 +35,7 @@ export const apiService = {
 
   // Get analysis status by ID
   getAnalysisStatus: async (analysisId: string): Promise<{
-    status: 'in_progress' | 'completed' | 'error';
+    status: 'in_progress' | 'success' | 'error';
     progress: {
       step: number;
       name: string;

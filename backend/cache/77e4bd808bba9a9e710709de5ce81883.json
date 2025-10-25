@@ -1,0 +1,388 @@
+{
+  "agents": [
+    {
+      "id": "agents/main_agents.py::triage_agent",
+      "name": "triage_agent",
+      "type": "zero-shot-react-description",
+      "file_path": "agents/main_agents.py",
+      "prompt": "Answer the following question as best you can.\n\nQuestion: {input}\n\n{agent_scratchpad}",
+      "system_instruction": "You are a customer support triage agent.\nYour role is to analyze customer queries and route them to the appropriate specialist:\n- Technical issues \u2192 Technical Support Agent\n- Billing/payment issues \u2192 Billing Agent\n- Complex or escalated cases \u2192 Escalation Agent\n\nBe professional, empathetic, and efficient in your routing decisions.",
+      "model_config": {
+        "model": "gemini-2.0-flash",
+        "temperature": 0.7,
+        "max_tokens": 1024
+      },
+      "tools": [
+        "query_customer_history",
+        "search_knowledge_base"
+      ],
+      "hyperparameters": {
+        "max_iterations": 5,
+        "verbose": true,
+        "handle_parsing_errors": true
+      },
+      "objective": "Routes customer queries to appropriate specialist agents. This agent analyzes incoming customer queries and determines which specialist agent should handle the request based on the query content.",
+      "code_snippet": "    def __init__(self, llm):\n        self.llm = llm\n        self.name = \"triage_agent\"\n        self.type = \"zero-shot-react-description\"\n        \n        # System instruction for the triage agent\n        self.system_instruction = \"\"\"You are a customer support triage agent.\nYour role is to analyze customer queries and route them to the appropriate specialist:\n- Technical issues \u2192 Technical Support Agent\n- Billing/payment issues \u2192 Billing Agent\n- Complex or escalated cases \u2192 Escalation Agent\n\nBe professional, empathetic, and efficient in your routing decisions.\"\"\"\n\n        # Prompt template\n        self.prompt = PromptTemplate(\n            input_variables=[\"input\", \"agent_scratchpad\"],\n            template=\"\"\"Answer the following question as best you can.\n\nQuestion: {input}\n\n{agent_scratchpad}\"\"\"\n        )\n        \n        # Tools available to triage agent\n        from tools.database_tools import query_customer_history\n        from tools.knowledge_tools import search_knowledge_base\n        \n        self.tools = [\n            Tool(\n                name=\"query_customer_history\",\n                func=query_customer_history,\n                description=\"Query customer history and previous interactions\"\n            ),\n            Tool(\n                name=\"search_knowledge_base\",\n                func=search_knowledge_base,\n                description=\"Search the knowledge base for relevant articles\"\n            )\n        ]\n        \n        # Create the agent\n        self.agent = create_react_agent(\n            llm=self.llm,\n            tools=self.tools,\n            prompt=self.prompt\n        )\n        \n        self.executor = AgentExecutor(\n            agent=self.agent,\n            tools=self.tools,\n            verbose=True,\n            max_iterations=5,\n            handle_parsing_errors=True\n        )"
+    },
+    {
+      "id": "agents/main_agents.py::technical_support_agent",
+      "name": "technical_support_agent",
+      "type": "conversational-react-description",
+      "file_path": "agents/main_agents.py",
+      "prompt": "You are a helpful technical support agent.\n\nChat History:\n{chat_history}\n\nQuestion: {input}\n\n{agent_scratchpad}",
+      "system_instruction": "You are a technical support specialist.\nYour role is to diagnose and resolve technical issues efficiently.\nProvide clear, step-by-step instructions and be patient with customers.\nIf an issue is too complex, escalate to the Escalation Agent.",
+      "model_config": {
+        "model": "gemini-2.0-flash",
+        "temperature": 0.7,
+        "max_tokens": 1024
+      },
+      "tools": [
+        "run_diagnostics",
+        "check_system_status",
+        "search_knowledge_base"
+      ],
+      "hyperparameters": {
+        "max_iterations": 10,
+        "verbose": true,
+        "handle_parsing_errors": true
+      },
+      "objective": "Handles technical issues and troubleshooting. This agent specializes in diagnosing and resolving technical problems, providing step-by-step troubleshooting guidance.",
+      "code_snippet": "    def __init__(self, llm):\n        self.llm = llm\n        self.name = \"technical_support_agent\"\n        self.type = \"conversational-react-description\"\n        \n        self.system_instruction = \"\"\"You are a technical support specialist.\nYour role is to diagnose and resolve technical issues efficiently.\nProvide clear, step-by-step instructions and be patient with customers.\nIf an issue is too complex, escalate to the Escalation Agent.\"\"\"\n\n        self.prompt = PromptTemplate(\n            input_variables=[\"input\", \"chat_history\", \"agent_scratchpad\"],\n            template=\"\"\"You are a helpful technical support agent.\n\nChat History:\n{chat_history}\n\nQuestion: {input}\n\n{agent_scratchpad}\"\"\"\n        )\n        \n        # Technical support tools\n        from tools.technical_tools import run_diagnostics, check_system_status\n        from tools.knowledge_tools import search_knowledge_base\n        \n        self.tools = [\n            Tool(\n                name=\"run_diagnostics\",\n                func=run_diagnostics,\n                description=\"Run system diagnostics to identify technical issues\"\n            ),\n            Tool(\n                name=\"check_system_status\",\n                func=check_system_status,\n                description=\"Check current system status and health\"\n            ),\n            Tool(\n                name=\"search_knowledge_base\",\n                func=search_knowledge_base,\n                description=\"Search technical documentation and solutions\"\n            )\n        ]\n        \n        self.agent = create_react_agent(\n            llm=self.llm,\n            tools=self.tools,\n            prompt=self.prompt\n        )\n        \n        self.executor = AgentExecutor(\n            agent=self.agent,\n            tools=self.tools,\n            verbose=True,\n            max_iterations=10,\n            handle_parsing_errors=True\n        )"
+    },
+    {
+      "id": "agents/main_agents.py::billing_agent",
+      "name": "billing_agent",
+      "type": "zero-shot-react-description",
+      "file_path": "agents/main_agents.py",
+      "prompt": "Handle the following billing inquiry professionally.\n\nInquiry: {input}\n\n{agent_scratchpad}",
+      "system_instruction": "You are a billing and payments specialist.\nYour role is to handle billing inquiries, process payments, and manage subscriptions.\nBe accurate with financial information and follow security protocols.\nVerify customer identity before discussing sensitive financial data.",
+      "model_config": {
+        "model": "gemini-2.0-flash",
+        "temperature": 0.7,
+        "max_tokens": 1024
+      },
+      "tools": [
+        "query_billing_history",
+        "process_refund",
+        "update_subscription",
+        "query_customer_history"
+      ],
+      "hyperparameters": {
+        "max_iterations": 8,
+        "verbose": true,
+        "handle_parsing_errors": true
+      },
+      "objective": "Manages billing, payments, and subscription queries. This agent handles all financial transactions, subscription management, and billing-related customer inquiries.",
+      "code_snippet": "    def __init__(self, llm):\n        self.llm = llm\n        self.name = \"billing_agent\"\n        self.type = \"zero-shot-react-description\"\n        \n        self.system_instruction = \"\"\"You are a billing and payments specialist.\nYour role is to handle billing inquiries, process payments, and manage subscriptions.\nBe accurate with financial information and follow security protocols.\nVerify customer identity before discussing sensitive financial data.\"\"\"\n\n        self.prompt = PromptTemplate(\n            input_variables=[\"input\", \"agent_scratchpad\"],\n            template=\"\"\"Handle the following billing inquiry professionally.\n\nInquiry: {input}\n\n{agent_scratchpad}\"\"\"\n        )\n        \n        # Billing tools\n        from tools.billing_tools import query_billing_history, process_refund, update_subscription\n        from tools.database_tools import query_customer_history\n        \n        self.tools = [\n            Tool(\n                name=\"query_billing_history\",\n                func=query_billing_history,\n                description=\"Query customer's billing and payment history\"\n            ),\n            Tool(\n                name=\"process_refund\",\n                func=process_refund,\n                description=\"Process a refund for the customer\"\n            ),\n            Tool(\n                name=\"update_subscription\",\n                func=update_subscription,\n                description=\"Update or modify customer subscription\"\n            ),\n            Tool(\n                name=\"query_customer_history\",\n                func=query_customer_history,\n                description=\"Query customer's account information\"\n            )\n        ]\n        \n        self.agent = create_react_agent(\n            llm=self.llm,\n            tools=self.tools,\n            prompt=self.prompt\n        )\n        \n        self.executor = AgentExecutor(\n            agent=self.agent,\n            tools=self.tools,\n            verbose=True,\n            max_iterations=8,\n            handle_parsing_errors=True\n        )"
+    },
+    {
+      "id": "agents/main_agents.py::escalation_agent",
+      "name": "escalation_agent",
+      "type": "zero-shot-react-description",
+      "file_path": "agents/main_agents.py",
+      "prompt": "Handle this escalated case with care and professionalism.\n\nCase: {input}\n\n{agent_scratchpad}",
+      "system_instruction": "You are an escalation specialist.\nYour role is to handle complex cases that require human intervention.\nCreate detailed tickets, summarize context, and ensure smooth handoff to human agents.\nPrioritize cases appropriately and maintain professional communication.",
+      "model_config": {
+        "model": "gemini-2.0-flash",
+        "temperature": 0.7,
+        "max_tokens": 1024
+      },
+      "tools": [
+        "create_ticket",
+        "assign_to_human",
+        "send_email",
+        "send_slack_notification"
+      ],
+      "hyperparameters": {
+        "max_iterations": 6,
+        "verbose": true,
+        "handle_parsing_errors": true
+      },
+      "objective": "Handles complex cases requiring human intervention. This agent manages escalated cases, creates tickets for human agents, and ensures proper handoff of complex issues.",
+      "code_snippet": "    def __init__(self, llm):\n        self.llm = llm\n        self.name = \"escalation_agent\"\n        self.type = \"zero-shot-react-description\"\n        \n        self.system_instruction = \"\"\"You are an escalation specialist.\nYour role is to handle complex cases that require human intervention.\nCreate detailed tickets, summarize context, and ensure smooth handoff to human agents.\nPrioritize cases appropriately and maintain professional communication.\"\"\"\n\n        self.prompt = PromptTemplate(\n            input_variables=[\"input\", \"agent_scratchpad\"],\n            template=\"\"\"Handle this escalated case with care and professionalism.\n\nCase: {input}\n\n{agent_scratchpad}\"\"\"\n        )\n        \n        # Escalation tools\n        from tools.ticket_tools import create_ticket, assign_to_human\n        from tools.notification_tools import send_email, send_slack_notification\n        \n        self.tools = [\n            Tool(\n                name=\"create_ticket\",\n                func=create_ticket,\n                description=\"Create a support ticket for human agents\"\n            ),\n            Tool(\n                name=\"assign_to_human\",\n                func=assign_to_human,\n                description=\"Assign case to a human support agent\"\n            ),\n            Tool(\n                name=\"send_email\",\n                func=send_email,\n                description=\"Send email notification to customer or team\"\n            ),\n            Tool(\n                name=\"send_slack_notification\",\n                func=send_slack_notification,\n                description=\"Send notification to support team via Slack\"\n            )\n        ]\n        \n        self.agent = create_react_agent(\n            llm=self.llm,\n            tools=self.tools,\n            prompt=self.prompt\n        )\n        \n        self.executor = AgentExecutor(\n            agent=self.agent,\n            tools=self.tools,\n            verbose=True,\n            max_iterations=6,\n            handle_parsing_errors=True\n        )"
+    }
+  ],
+  "tools": [
+    {
+      "id": "tool_query_customer_history_001",
+      "name": "query_customer_history",
+      "description": "Query customer history and previous interactions",
+      "file_path": "agents/main_agents.py",
+      "function_signature": "query_customer_history(query: str) -> Dict[str, Any]",
+      "parameters": [
+        {
+          "name": "query",
+          "type": "str",
+          "description": "The customer query or identifier to retrieve history for."
+        }
+      ],
+      "return_type": "Dict[str, Any]",
+      "code": "/* Implementation of query_customer_history is located in tools/database_tools.py and is not available in this file. */",
+      "summary": "Retrieves the historical data and past interactions for a given customer."
+    },
+    {
+      "id": "tool_search_knowledge_base_001",
+      "name": "search_knowledge_base",
+      "description": "Search the knowledge base for relevant articles",
+      "file_path": "agents/main_agents.py",
+      "function_signature": "search_knowledge_base(query: str) -> str",
+      "parameters": [
+        {
+          "name": "query",
+          "type": "str",
+          "description": "The search query for the knowledge base."
+        }
+      ],
+      "return_type": "str",
+      "code": "/* Implementation of search_knowledge_base is located in tools/knowledge_tools.py and is not available in this file. */",
+      "summary": "Performs a search within the knowledge base to find articles pertinent to a query."
+    },
+    {
+      "id": "tool_run_diagnostics_001",
+      "name": "run_diagnostics",
+      "description": "Run system diagnostics to identify technical issues",
+      "file_path": "agents/main_agents.py",
+      "function_signature": "run_diagnostics(issue_description: str = None) -> str",
+      "parameters": [
+        {
+          "name": "issue_description",
+          "type": "str",
+          "description": "An optional description of the technical issue to focus diagnostics."
+        }
+      ],
+      "return_type": "str",
+      "code": "/* Implementation of run_diagnostics is located in tools/technical_tools.py and is not available in this file. */",
+      "summary": "Initiates a system diagnostic process to pinpoint the root cause of technical problems."
+    },
+    {
+      "id": "tool_check_system_status_001",
+      "name": "check_system_status",
+      "description": "Check current system status and health",
+      "file_path": "agents/main_agents.py",
+      "function_signature": "check_system_status() -> str",
+      "parameters": [],
+      "return_type": "str",
+      "code": "/* Implementation of check_system_status is located in tools/technical_tools.py and is not available in this file. */",
+      "summary": "Retrieves the current operational status and health of the system."
+    },
+    {
+      "id": "tool_query_billing_history_001",
+      "name": "query_billing_history",
+      "description": "Query customer's billing and payment history",
+      "file_path": "agents/main_agents.py",
+      "function_signature": "query_billing_history(customer_id: str) -> Dict[str, Any]",
+      "parameters": [
+        {
+          "name": "customer_id",
+          "type": "str",
+          "description": "The unique identifier for the customer."
+        }
+      ],
+      "return_type": "Dict[str, Any]",
+      "code": "/* Implementation of query_billing_history is located in tools/billing_tools.py and is not available in this file. */",
+      "summary": "Accesses and provides a record of a customer's past billing and payment transactions."
+    },
+    {
+      "id": "tool_process_refund_001",
+      "name": "process_refund",
+      "description": "Process a refund for the customer",
+      "file_path": "agents/main_agents.py",
+      "function_signature": "process_refund(customer_id: str, amount: float, reason: str) -> str",
+      "parameters": [
+        {
+          "name": "customer_id",
+          "type": "str",
+          "description": "The unique identifier for the customer."
+        },
+        {
+          "name": "amount",
+          "type": "float",
+          "description": "The amount to be refunded."
+        },
+        {
+          "name": "reason",
+          "type": "str",
+          "description": "The reason for processing the refund."
+        }
+      ],
+      "return_type": "str",
+      "code": "/* Implementation of process_refund is located in tools/billing_tools.py and is not available in this file. */",
+      "summary": "Initiates and completes a refund transaction for a specified customer and amount."
+    },
+    {
+      "id": "tool_update_subscription_001",
+      "name": "update_subscription",
+      "description": "Update or modify customer subscription",
+      "file_path": "agents/main_agents.py",
+      "function_signature": "update_subscription(customer_id: str, new_plan: str, details: Dict[str, Any] = None) -> str",
+      "parameters": [
+        {
+          "name": "customer_id",
+          "type": "str",
+          "description": "The unique identifier for the customer."
+        },
+        {
+          "name": "new_plan",
+          "type": "str",
+          "description": "The new subscription plan to apply."
+        },
+        {
+          "name": "details",
+          "type": "Dict[str, Any]",
+          "description": "Optional additional details for the subscription update.",
+          "optional": true
+        }
+      ],
+      "return_type": "str",
+      "code": "/* Implementation of update_subscription is located in tools/billing_tools.py and is not available in this file. */",
+      "summary": "Allows for changes or modifications to a customer's existing subscription plan."
+    },
+    {
+      "id": "tool_create_ticket_001",
+      "name": "create_ticket",
+      "description": "Create a support ticket for human agents",
+      "file_path": "agents/main_agents.py",
+      "function_signature": "create_ticket(summary: str, description: str, priority: str = 'Medium') -> str",
+      "parameters": [
+        {
+          "name": "summary",
+          "type": "str",
+          "description": "A brief summary of the issue for the ticket."
+        },
+        {
+          "name": "description",
+          "type": "str",
+          "description": "A detailed description of the issue."
+        },
+        {
+          "name": "priority",
+          "type": "str",
+          "description": "The priority level of the ticket (e.g., 'Low', 'Medium', 'High'). Defaults to 'Medium'.",
+          "optional": true
+        }
+      ],
+      "return_type": "str",
+      "code": "/* Implementation of create_ticket is located in tools/ticket_tools.py and is not available in this file. */",
+      "summary": "Generates a new support ticket that can be reviewed and handled by a human agent."
+    },
+    {
+      "id": "tool_assign_to_human_001",
+      "name": "assign_to_human",
+      "description": "Assign case to a human support agent",
+      "file_path": "agents/main_agents.py",
+      "function_signature": "assign_to_human(ticket_id: str, agent_id: str = None) -> str",
+      "parameters": [
+        {
+          "name": "ticket_id",
+          "type": "str",
+          "description": "The ID of the ticket to be assigned."
+        },
+        {
+          "name": "agent_id",
+          "type": "str",
+          "description": "The ID of the human agent to assign the ticket to. If none, assigns to a default or available agent.",
+          "optional": true
+        }
+      ],
+      "return_type": "str",
+      "code": "/* Implementation of assign_to_human is located in tools/ticket_tools.py and is not available in this file. */",
+      "summary": "Designates a specific support case or ticket to a human agent for further handling."
+    },
+    {
+      "id": "tool_send_email_001",
+      "name": "send_email",
+      "description": "Send email notification to customer or team",
+      "file_path": "agents/main_agents.py",
+      "function_signature": "send_email(recipient: str, subject: str, body: str) -> str",
+      "parameters": [
+        {
+          "name": "recipient",
+          "type": "str",
+          "description": "The email address of the recipient."
+        },
+        {
+          "name": "subject",
+          "type": "str",
+          "description": "The subject line of the email."
+        },
+        {
+          "name": "body",
+          "type": "str",
+          "description": "The main content of the email."
+        }
+      ],
+      "return_type": "str",
+      "code": "/* Implementation of send_email is located in tools/notification_tools.py and is not available in this file. */",
+      "summary": "Composes and dispatches an email to a specified recipient with a given subject and body."
+    },
+    {
+      "id": "tool_send_slack_notification_001",
+      "name": "send_slack_notification",
+      "description": "Send notification to support team via Slack",
+      "file_path": "agents/main_agents.py",
+      "function_signature": "send_slack_notification(channel: str, message: str) -> str",
+      "parameters": [
+        {
+          "name": "channel",
+          "type": "str",
+          "description": "The Slack channel ID or name to send the notification to."
+        },
+        {
+          "name": "message",
+          "type": "str",
+          "description": "The content of the notification message."
+        }
+      ],
+      "return_type": "str",
+      "code": "/* Implementation of send_slack_notification is located in tools/notification_tools.py and is not available in this file. */",
+      "summary": "Delivers a notification message to a designated Slack channel for the support team."
+    }
+  ],
+  "relationships": [
+    {
+      "id": "rel_triage_to_tech",
+      "from_agent_id": "agents/main_agents.py::triage_agent",
+      "to_agent_id": "agents/main_agents.py::technical_support_agent",
+      "type": "calls",
+      "description": "The Triage Agent is configured to analyze customer queries and route technical issues to the Technical Support Agent. This represents a sequential hand-off of the customer interaction.",
+      "data_flow": "Initial customer query (input), relevant context gathered by Triage Agent from tools like 'query_customer_history' or 'search_knowledge_base' (e.g., customer ID, initial issue diagnosis, related knowledge articles)."
+    },
+    {
+      "id": "rel_triage_to_billing",
+      "from_agent_id": "agents/main_agents.py::triage_agent",
+      "to_agent_id": "agents/main_agents.py::billing_agent",
+      "type": "calls",
+      "description": "The Triage Agent is configured to analyze customer queries and route billing/payment issues to the Billing Agent. This represents a sequential hand-off of the customer interaction.",
+      "data_flow": "Initial customer query (input), relevant context gathered by Triage Agent from 'query_customer_history' (e.g., customer ID, account status, previous interactions)."
+    },
+    {
+      "id": "rel_triage_to_escalation",
+      "from_agent_id": "agents/main_agents.py::triage_agent",
+      "to_agent_id": "agents/main_agents.py::escalation_agent",
+      "type": "calls",
+      "description": "The Triage Agent is configured to analyze customer queries and route complex or escalated cases to the Escalation Agent. This represents a sequential hand-off for further action, potentially involving human agents.",
+      "data_flow": "Initial customer query (input), summary of the issue, any gathered context, and the reason for escalation."
+    },
+    {
+      "id": "rel_triage_billing_shared_customer_history",
+      "from_agent_id": "agents/main_agents.py::triage_agent",
+      "to_agent_id": "agents/main_agents.py::billing_agent",
+      "type": "collaborates",
+      "description": "Both the Triage Agent and the Billing Agent have access to the 'query_customer_history' tool. The Triage Agent likely uses it for initial query analysis and routing, while the Billing Agent uses it for deeper context during billing operations. This implies shared access to customer account information for different purposes.",
+      "data_flow": "Customer ID, customer account status, subscription tier, previous interaction types, total tickets. Triage might pass this data to Billing, or Billing might re-query it independently."
+    },
+    {
+      "id": "rel_triage_tech_shared_knowledge_base",
+      "from_agent_id": "agents/main_agents.py::triage_agent",
+      "to_agent_id": "agents/main_agents.py::technical_support_agent",
+      "type": "collaborates",
+      "description": "Both the Triage Agent and the Technical Support Agent have access to the 'search_knowledge_base' tool. The Triage Agent might use it for initial issue classification or to provide quick self-help options, while the Technical Support Agent uses it for detailed troubleshooting. This implies shared access to knowledge articles for different stages of support.",
+      "data_flow": "Search query, relevant knowledge base article titles and summaries. Triage might pass relevant articles or search results to Technical Support, or Technical Support might perform its own targeted searches."
+    }
+  ],
+  "repository": {
+    "owner": "ashworks1706",
+    "repo_name": "langchain-project",
+    "description": null
+  }
+}
