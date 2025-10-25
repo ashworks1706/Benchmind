@@ -24,7 +24,7 @@ interface CanvasEdge {
 }
 
 export function Canvas() {
-  const { agentData, isLoading, loadingMessage, highlightedElements, errorHighlightedElements, setSelectedElement, setPanelView, testCases, testResults, currentTestIndex, isTestingInProgress } = useStore();
+  const { agentData, isLoading, loadingMessage, highlightedElements, errorHighlightedElements, setSelectedElement, setPanelView, testCases, pendingTestCases, testResults, currentTestIndex, isTestingInProgress } = useStore();
   const canvasRef = useRef<HTMLDivElement>(null);
   const [nodes, setNodes] = useState<CanvasNode[]>([]);
   const [edges, setEdges] = useState<CanvasEdge[]>([]);
@@ -33,6 +33,9 @@ export function Canvas() {
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [draggedNode, setDraggedNode] = useState<CanvasNode | null>(null);
   const [nodeDragStart, setNodeDragStart] = useState({ x: 0, y: 0 });
+
+  // Use pendingTestCases or testCases - whichever has data
+  const activeTestCases = pendingTestCases.length > 0 ? pendingTestCases : testCases;
 
   // Build graph from agent data
   useEffect(() => {
@@ -129,12 +132,11 @@ export function Canvas() {
 
   // Add test nodes when test cases are available
   useEffect(() => {
-    if (!testCases || testCases.length === 0 || !agentData) return;
+    if (!activeTestCases || activeTestCases.length === 0 || !agentData) return;
 
     setNodes(prevNodes => {
       // Remove old test nodes
       const nonTestNodes = prevNodes.filter(n => n.type !== 'test');
-      const nodeMap = new Map(nonTestNodes.map(n => [n.id, n]));
       
       // Create test nodes on the right side of the canvas
       const testNodes: CanvasNode[] = [];
@@ -142,7 +144,7 @@ export function Canvas() {
       const testSpacing = 150;
       const testsPerColumn = 5;
       
-      testCases.forEach((testCase, idx) => {
+      activeTestCases.forEach((testCase, idx) => {
         const col = Math.floor(idx / testsPerColumn);
         const row = idx % testsPerColumn;
         
@@ -156,59 +158,60 @@ export function Canvas() {
           data: testCase,
         };
         testNodes.push(testNode);
-        nodeMap.set(testNode.id, testNode);
       });
 
-      return [...nonTestNodes, ...testNodes];
-    });
+      const allNodes = [...nonTestNodes, ...testNodes];
 
-    // Add edges from test nodes to their targets
-    setEdges(prevEdges => {
-      // Remove old test edges
-      const nonTestEdges = prevEdges.filter(e => e.type !== 'test-target');
-      const testEdges: CanvasEdge[] = [];
+      // Update edges in the same effect
+      setEdges(prevEdges => {
+        // Remove old test edges
+        const nonTestEdges = prevEdges.filter(e => e.type !== 'test-target');
+        const testEdges: CanvasEdge[] = [];
 
-      testCases.forEach((testCase) => {
-        const testNodeId = `test-${testCase.id}`;
-        const targetIds = testCase.highlight_elements || [];
-        
-        // Get test node
-        const testNode = nodes.find(n => n.id === testNodeId);
-        if (!testNode) return;
-
-        // Create edges to all highlighted elements
-        targetIds.forEach(targetId => {
-          const targetNode = nodes.find(n => 
-            n.id === targetId || 
-            (n.type === 'tool' && n.id.includes(targetId))
-          );
+        activeTestCases.forEach((testCase) => {
+          const testNodeId = `test-${testCase.id}`;
+          const targetIds = testCase.highlight_elements || [];
           
-          if (targetNode) {
-            // Determine color based on test result
-            const result = testResults.get(testCase.id);
-            let color = '#6b7280'; // default gray
-            if (result) {
-              if (result.status === 'passed') color = '#22c55e'; // green
-              else if (result.status === 'failed') color = '#ef4444'; // red
-              else if (result.status === 'warning') color = '#f59e0b'; // amber
-            } else if (isTestingInProgress && testCases[currentTestIndex]?.id === testCase.id) {
-              color = '#3b82f6'; // blue for currently running
-            }
+          // Get test node from the new nodes array
+          const testNode = allNodes.find(n => n.id === testNodeId);
+          if (!testNode) return;
 
-            testEdges.push({
-              id: `test-edge-${testCase.id}-${targetId}`,
-              type: 'test-target',
-              from: testNode,
-              to: targetNode,
-              color,
-            });
-          }
+          // Create edges to all highlighted elements
+          targetIds.forEach(targetId => {
+            const targetNode = allNodes.find(n => 
+              n.id === targetId || 
+              (n.type === 'tool' && n.id.includes(targetId))
+            );
+            
+            if (targetNode) {
+              // Determine color based on test result
+              const result = testResults.get(testCase.id);
+              let color = '#6b7280'; // default gray
+              if (result) {
+                if (result.status === 'passed') color = '#22c55e'; // green
+                else if (result.status === 'failed') color = '#ef4444'; // red
+                else if (result.status === 'warning') color = '#f59e0b'; // amber
+              } else if (isTestingInProgress && activeTestCases[currentTestIndex]?.id === testCase.id) {
+                color = '#3b82f6'; // blue for currently running
+              }
+
+              testEdges.push({
+                id: `test-edge-${testCase.id}-${targetId}`,
+                type: 'test-target',
+                from: testNode,
+                to: targetNode,
+                color,
+              });
+            }
+          });
         });
+
+        return [...nonTestEdges, ...testEdges];
       });
 
-      return [...nonTestEdges, ...testEdges];
+      return allNodes;
     });
-  }, [testCases, agentData, nodes, testResults, isTestingInProgress, currentTestIndex]);
+  }, [activeTestCases, agentData, testResults, isTestingInProgress, currentTestIndex]);
 
   // Update edge references when nodes move
   useEffect(() => {
@@ -547,8 +550,14 @@ export function Canvas() {
 
         {/* Draw nodes */}
         {nodes.map((node) => {
-          const isHighlighted = highlightedElements.has(node.data.id);
-          const isErrorHighlighted = errorHighlightedElements.has(node.data.id);
+          // For test nodes, check if the node.id (which includes 'test-' prefix) is highlighted
+          // For other nodes, check node.data.id
+          const isHighlighted = node.type === 'test' 
+            ? highlightedElements.has(node.id)
+            : highlightedElements.has(node.data.id);
+          const isErrorHighlighted = node.type === 'test'
+            ? errorHighlightedElements.has(node.id)
+            : errorHighlightedElements.has(node.data.id);
           const isAgent = node.type === 'agent';
           const isTest = node.type === 'test';
           
@@ -566,10 +575,11 @@ export function Canvas() {
           
           if (isTest) {
             // Test node styling
-            if (isRunningTest) {
+            if (isRunningTest || isHighlighted) {
+              // Running or explicitly highlighted
               borderClass = 'border-blue-500';
               bgClass = 'bg-blue-50 dark:bg-blue-900/20';
-              effectClass = 'shadow-xl ring-4 ring-blue-500/50 animate-pulse';
+              effectClass = 'shadow-xl scale-110 ring-4 ring-blue-500/50 animate-pulse';
             } else if (testResult) {
               if (testResult.status === 'passed') {
                 borderClass = 'border-green-500';
