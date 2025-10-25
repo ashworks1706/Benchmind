@@ -51,6 +51,7 @@ class AuthService {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('user');
       localStorage.removeItem('accessToken');
+      localStorage.removeItem('userToken');
     }
   }
 
@@ -70,6 +71,11 @@ class AuthService {
   getAccessToken(): string | null {
     if (typeof window === 'undefined') return null;
     return localStorage.getItem('accessToken');
+  }
+
+  getUserToken(): string | null {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem('userToken');
   }
 
   async getGitHubRepos(): Promise<GitHubRepo[]> {

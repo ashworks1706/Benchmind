@@ -5,7 +5,7 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:800
 
 class ProjectService {
   async getProjects(): Promise<Project[]> {
-    const token = authService.getAccessToken();
+    const token = authService.getUserToken();
     if (!token) throw new Error('Not authenticated');
 
     const response = await fetch(`${BACKEND_URL}/projects`, {
@@ -22,7 +22,7 @@ class ProjectService {
   }
 
   async getProject(id: string): Promise<Project> {
-    const token = authService.getAccessToken();
+    const token = authService.getUserToken();
     if (!token) throw new Error('Not authenticated');
 
     const response = await fetch(`${BACKEND_URL}/projects/${id}`, {
@@ -44,7 +44,7 @@ class ProjectService {
     repoUrl: string;
     config?: Partial<ProjectConfig>;
   }): Promise<Project> {
-    const token = authService.getAccessToken();
+    const token = authService.getUserToken();
     if (!token) throw new Error('Not authenticated');
 
     const response = await fetch(`${BACKEND_URL}/projects`, {
@@ -65,7 +65,7 @@ class ProjectService {
   }
 
   async updateProject(id: string, data: Partial<Project>): Promise<Project> {
-    const token = authService.getAccessToken();
+    const token = authService.getUserToken();
     if (!token) throw new Error('Not authenticated');
 
     const response = await fetch(`${BACKEND_URL}/projects/${id}`, {
@@ -85,7 +85,7 @@ class ProjectService {
   }
 
   async deleteProject(id: string): Promise<void> {
-    const token = authService.getAccessToken();
+    const token = authService.getUserToken();
     if (!token) throw new Error('Not authenticated');
 
     const response = await fetch(`${BACKEND_URL}/projects/${id}`, {
@@ -101,7 +101,7 @@ class ProjectService {
   }
 
   async analyzeProject(id: string): Promise<{ analysisId: string }> {
-    const token = authService.getAccessToken();
+    const token = authService.getUserToken();
     if (!token) throw new Error('Not authenticated');
 
     const response = await fetch(`${BACKEND_URL}/projects/${id}/analyze`, {

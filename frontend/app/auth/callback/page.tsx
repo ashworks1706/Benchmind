@@ -29,6 +29,7 @@ export default function AuthCallbackPage() {
       // Store tokens in localStorage
       try {
         localStorage.setItem('accessToken', accessToken);
+        localStorage.setItem('userToken', token);
         // Decode and store user data from token
         const payload = JSON.parse(atob(token.split('.')[1]));
         const user = {
