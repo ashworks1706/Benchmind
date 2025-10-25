@@ -2,7 +2,7 @@
 
 import { useStore } from '@/lib/store';
 import { ScrollArea } from './ui/ScrollArea';
-import { Agent, Tool, Relationship } from '@/types';
+import { Agent, Tool, Relationship, TestCase } from '@/types';
 import { X, Save } from 'lucide-react';
 import { useState } from 'react';
 import { apiService } from '@/lib/api';
@@ -14,7 +14,7 @@ export function DetailsPanel() {
     return (
       <div className="h-full flex items-center justify-center p-4">
         <p className="text-sm text-muted-foreground text-center">
-          Click on an agent, tool, or relationship to view details
+          Click on an agent, tool, relationship, or test to view details
         </p>
       </div>
     );
@@ -41,6 +41,9 @@ export function DetailsPanel() {
         )}
         {selectedElement.type === 'relationship' && (
           <RelationshipDetails relationship={selectedElement.data as Relationship} />
+        )}
+        {selectedElement.type === 'test' && (
+          <TestDetails testCase={selectedElement.data as TestCase} />
         )}
       </ScrollArea>
     </div>
@@ -329,6 +332,144 @@ function RelationshipDetails({ relationship }: { relationship: Relationship }) {
       <DetailSection label="To Agent" value={toAgent?.name || 'Unknown'} />
       <DetailSection label="Description" value={relationship.description} />
       <DetailSection label="Data Flow" value={relationship.data_flow} />
+    </div>
+  );
+}
+
+function TestDetails({ testCase }: { testCase: TestCase }) {
+  const { testResults, agentData } = useStore();
+  const result = testResults.get(testCase.id);
+
+  const getStatusColor = (status?: string) => {
+    if (!status) return 'text-gray-500';
+    if (status === 'passed') return 'text-green-600 dark:text-green-400';
+    if (status === 'failed') return 'text-red-600 dark:text-red-400';
+    if (status === 'warning') return 'text-amber-600 dark:text-amber-400';
+    return 'text-gray-500';
+  };
+
+  const getStatusIcon = (status?: string) => {
+    if (!status) return '⏸️';
+    if (status === 'passed') return '✅';
+    if (status === 'failed') return '❌';
+    if (status === 'warning') return '⚠️';
+    return '❓';
+  };
+
+  const getCategoryIcon = (category: string) => {
+    const icons: { [key: string]: string } = {
+      'tool_calling': '🔧',
+      'reasoning': '🧠',
+      'performance': '⚡',
+      'collaborative': '🤝',
+      'relationship': '🔗',
+      'connection': '📡',
+      'security': '🔒',
+      'error_handling': '⚠️',
+      'output_quality': '✨',
+      'edge_case': '🎯',
+      'prompt_injection': '🛡️',
+      'hyperparameter': '⚙️',
+    };
+    return icons[category] || '📋';
+  };
+
+  return (
+    <div className="p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <h4 className="font-semibold text-lg flex items-center gap-2">
+          {getCategoryIcon(testCase.category)}
+          Test Case
+        </h4>
+        {result && (
+          <div className={`flex items-center gap-2 px-3 py-1 rounded-full bg-muted ${getStatusColor(result.status)}`}>
+            <span>{getStatusIcon(result.status)}</span>
+            <span className="text-sm font-semibold capitalize">{result.status}</span>
+          </div>
+        )}
+      </div>
+
+      <DetailSection label="Name" value={testCase.name} />
+      <DetailSection label="Category" value={testCase.category} />
+      <DetailSection label="Description" value={testCase.description} />
+      
+      <div>
+        <label className="text-sm font-medium text-muted-foreground">Target</label>
+        <div className="mt-1 p-3 bg-muted rounded-md">
+          <p className="text-sm font-medium">{testCase.target.name}</p>
+          <p className="text-xs text-muted-foreground capitalize">{testCase.target.type}</p>
+        </div>
+      </div>
+
+      <DetailSection label="Test Input" value={testCase.test_input} />
+      <DetailSection label="Expected Behavior" value={testCase.expected_behavior} />
+      <DetailSection label="Success Criteria" value={testCase.success_criteria} />
+
+      {testCase.metrics && testCase.metrics.length > 0 && (
+        <div>
+          <label className="text-sm font-medium text-muted-foreground">Metrics</label>
+          <div className="mt-1 space-y-2">
+            {testCase.metrics.map((metric, idx) => (
+              <div key={idx} className="p-2 bg-muted rounded-md">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">{metric.name}</span>
+                  {metric.value !== undefined && (
+                    <span className={`text-sm font-semibold ${metric.passed ? 'text-green-600' : 'text-red-600'}`}>
+                      {metric.value} {metric.unit}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">{metric.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {result && (
+        <div className="space-y-3">
+          <div className="border-t border-border pt-4">
+            <h5 className="font-semibold text-md mb-3">Test Results</h5>
+            
+            <div>
+              <label className="text-sm font-medium text-muted-foreground">Summary</label>
+              <p className="mt-1 text-sm">{result.results.summary}</p>
+            </div>
+
+            <div className="mt-3">
+              <label className="text-sm font-medium text-muted-foreground">Details</label>
+              <p className="mt-1 text-sm">{result.results.details}</p>
+            </div>
+
+            {result.results.issues_found && result.results.issues_found.length > 0 && (
+              <div className="mt-3">
+                <label className="text-sm font-medium text-muted-foreground">Issues Found</label>
+                <ul className="mt-1 space-y-1">
+                  {result.results.issues_found.map((issue, idx) => (
+                    <li key={idx} className="text-sm text-red-600 dark:text-red-400 flex items-start gap-2">
+                      <span>•</span>
+                      <span>{issue}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {result.execution_time && (
+              <div className="mt-3">
+                <label className="text-sm font-medium text-muted-foreground">Execution Time</label>
+                <p className="mt-1 text-sm">{result.execution_time.toFixed(2)}s</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {!result && (
+        <div className="p-3 bg-muted rounded-md text-center">
+          <p className="text-sm text-muted-foreground">Test not yet executed</p>
+        </div>
+      )}
     </div>
   );
 }

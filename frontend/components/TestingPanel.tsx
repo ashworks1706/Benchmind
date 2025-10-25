@@ -106,9 +106,14 @@ import {
             });
           }
 
-          // Handle highlighting - extract element IDs
+          // Handle highlighting - extract element IDs and include test block
           if (progress.data?.highlight_elements && progress.data.highlight_elements.length > 0) {
-            highlightElements(progress.data.highlight_elements);
+            // Add the test block ID if we have a test_id
+            const elementsToHighlight = [...progress.data.highlight_elements];
+            if (progress.data.test_id) {
+              elementsToHighlight.push(`test-${progress.data.test_id}`);
+            }
+            highlightElements(elementsToHighlight);
             
             // Auto-clear highlights after 3 seconds unless it's a new test starting
             if (progress.type !== 'test_started') {

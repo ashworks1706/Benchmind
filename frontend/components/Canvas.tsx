@@ -433,8 +433,11 @@ export function Canvas() {
             const toY = edge.to.y + edge.to.height / 2;
 
             const isAgentTool = edge.type === 'agent-tool';
-            const color = isAgentTool ? '#10b981' : '#ef4444';
-            const strokeWidth = isAgentTool ? 3 : 4;
+            const isTestTarget = edge.type === 'test-target';
+            
+            // Use edge.color for test-target edges
+            let color = isTestTarget && edge.color ? edge.color : (isAgentTool ? '#10b981' : '#ef4444');
+            const strokeWidth = isAgentTool ? 3 : isTestTarget ? 2 : 4;
             const markerId = isAgentTool ? 'arrowhead-green' : 'arrowhead-red';
             
             // Check if this edge should be highlighted
@@ -447,6 +450,15 @@ export function Canvas() {
               // Vertical connection from agent to tool (smooth curve down)
               const midY = (fromY + toY) / 2;
               path = `M ${fromX} ${edge.from.y + edge.from.height} C ${fromX} ${midY}, ${toX} ${midY}, ${toX} ${edge.to.y}`;
+            } else if (isTestTarget) {
+              // Smooth curve from test to target
+              const dx = toX - fromX;
+              const dy = toY - fromY;
+              const distance = Math.sqrt(dx * dx + dy * dy);
+              const curveOffset = Math.min(distance * 0.2, 80);
+              const midX = (fromX + toX) / 2;
+              const midY = (fromY + toY) / 2 + curveOffset;
+              path = `M ${fromX} ${fromY} Q ${midX} ${midY}, ${toX} ${toY}`;
             } else {
               // Horizontal connection between agents (smooth curve with arc)
               const dx = toX - fromX;
