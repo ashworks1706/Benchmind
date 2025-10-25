@@ -3,7 +3,7 @@
 import { useStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { AlertCircle, Check, GitCommit, Trash2, X } from 'lucide-react';
+import { AlertCircle, Check, GitCommit, Trash2, X, Github } from 'lucide-react';
 import { useState } from 'react';
 import { apiService } from '@/lib/api';
 
@@ -18,26 +18,58 @@ export default function ChangeQueuePanel() {
     if (!agentData) return;
     
     setIsPushing(true);
-    let successCount = 0;
-    let failCount = 0;
 
     try {
       addStatusMessage({
         type: 'info',
-        message: `🚀 Pushing ${queuedChanges.length} queued changes...`,
+        message: `🚀 Pushing ${queuedChanges.length} queued changes to GitHub...`,
       });
 
-      // Process all queued changes
-      for (const change of queuedChanges) {
+      // Separate changes by type
+      const fixes = queuedChanges.filter(c => c.type === 'fix');
+      const edits = queuedChanges.filter(c => c.type === 'edit');
+
+      let successCount = 0;
+      let failCount = 0;
+
+      // Apply all fixes in batch (single commit per file)
+      if (fixes.length > 0) {
         try {
-          if (change.type === 'fix') {
-            await apiService.applyFix(change.data.recommendation, agentData);
-            successCount++;
-          } else if (change.type === 'edit') {
-            // Handle edit changes (implement based on your edit API)
-            // await apiService.applyEdit(change.data);
-            successCount++;
+          const result = await apiService.applyFixesBatch(
+            fixes.map(f => f.data.recommendation), 
+            agentData
+          );
+          
+          if (result.result.success) {
+            successCount += fixes.length;
+            addStatusMessage({
+              type: 'success',
+              message: `✅ Committed ${result.result.files_updated} file(s) with ${result.result.total_fixes} fix(es) to GitHub!`,
+            });
+          } else {
+            failCount += fixes.length;
+            const errorMsg = result.result.errors.join(', ');
+            addStatusMessage({
+              type: 'error',
+              message: `❌ Failed to push fixes: ${errorMsg}`,
+            });
           }
+        } catch (error: any) {
+          console.error('Failed to apply fixes batch:', error);
+          failCount += fixes.length;
+          addStatusMessage({
+            type: 'error',
+            message: `❌ Failed to push fixes: ${error.message}`,
+          });
+        }
+      }
+
+      // Apply edits individually (if you have edit functionality)
+      for (const change of edits) {
+        try {
+          // Handle edit changes (implement based on your edit API)
+          // await apiService.applyEdit(change.data);
+          successCount++;
         } catch (error: any) {
           console.error(`Failed to apply change ${change.id}:`, error);
           failCount++;
@@ -47,7 +79,7 @@ export default function ChangeQueuePanel() {
       if (failCount === 0) {
         addStatusMessage({
           type: 'success',
-          message: `✅ Successfully pushed all ${successCount} changes!`,
+          message: `✨ All changes successfully pushed and committed to GitHub!`,
         });
         clearQueuedChanges();
       } else {
@@ -145,11 +177,11 @@ export default function ChangeQueuePanel() {
               className="flex-1"
             >
               {isPushing ? (
-                <>⏳ Pushing...</>
+                <>⏳ Pushing to GitHub...</>
               ) : (
                 <>
-                  <Check className="w-4 h-4 mr-2" />
-                  Push All Changes
+                  <Github className="w-4 h-4 mr-2" />
+                  Push to GitHub
                 </>
               )}
             </Button>

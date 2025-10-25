@@ -146,6 +146,121 @@ class CodeEditor:
                 'error': f'Failed to update file: {update_response.json().get("message", "Unknown error")}'
             }
     
+    def apply_fixes_batch(
+        self, 
+        fixes: List[Dict[str, Any]], 
+        agent_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Apply multiple fixes in a single commit to GitHub
+        
+        Args:
+            fixes: List of fix suggestions
+            agent_data: Full agent data context
+            
+        Returns:
+            Result of applying all fixes
+        """
+        if not self.github_token or not agent_data.get('repository'):
+            return {
+                'error': 'GitHub token or repository information missing',
+                'applied_locally': len(fixes)
+            }
+        
+        repo_info = agent_data['repository']
+        owner = repo_info.get('owner')
+        repo_name = repo_info.get('repo_name')
+        
+        if not all([owner, repo_name]):
+            return {'error': 'Missing repository information'}
+        
+        # GitHub API headers
+        headers = {
+            'Authorization': f'token {self.github_token}',
+            'Accept': 'application/vnd.github.v3+json',
+        }
+        
+        # Group fixes by file
+        files_to_update = {}
+        for fix in fixes:
+            file_path = fix.get('file_path')
+            if file_path not in files_to_update:
+                files_to_update[file_path] = []
+            files_to_update[file_path].append(fix)
+        
+        updated_files = []
+        errors = []
+        
+        # Process each file
+        for file_path, file_fixes in files_to_update.items():
+            try:
+                # Get current file content
+                file_url = f'https://api.github.com/repos/{owner}/{repo_name}/contents/{file_path}'
+                response = requests.get(file_url, headers=headers)
+                
+                if response.status_code != 200:
+                    errors.append(f'{file_path}: Failed to fetch')
+                    continue
+                
+                file_data = response.json()
+                
+                # Decode base64 content
+                import base64
+                decoded_content = base64.b64decode(file_data['content']).decode('utf-8')
+                new_content = decoded_content
+                
+                # Apply all fixes to this file
+                for fix in file_fixes:
+                    current_code = fix.get('current_code', '')
+                    suggested_code = fix.get('suggested_code', '')
+                    
+                    if current_code.strip() in new_content:
+                        new_content = new_content.replace(current_code.strip(), suggested_code.strip())
+                    else:
+                        # Try line-based replacement
+                        lines = new_content.split('\n')
+                        line_num = fix.get('line_number', 0)
+                        if 0 < line_num <= len(lines):
+                            lines[line_num - 1] = suggested_code.strip()
+                            new_content = '\n'.join(lines)
+                
+                # Encode new content
+                new_content_encoded = base64.b64encode(new_content.encode('utf-8')).decode('utf-8')
+                
+                # Create commit message
+                commit_message = f"🤖 Auto-fix: Applied {len(file_fixes)} fix{'es' if len(file_fixes) > 1 else ''} to {file_path}"
+                
+                # Update file on GitHub
+                update_data = {
+                    'message': commit_message,
+                    'content': new_content_encoded,
+                    'sha': file_data['sha'],
+                }
+                
+                update_response = requests.put(file_url, headers=headers, json=update_data)
+                
+                if update_response.status_code in [200, 201]:
+                    result = update_response.json()
+                    updated_files.append({
+                        'file': file_path,
+                        'fixes_applied': len(file_fixes),
+                        'commit_sha': result['commit']['sha'],
+                        'commit_url': result['commit']['html_url']
+                    })
+                else:
+                    errors.append(f'{file_path}: {update_response.json().get("message", "Unknown error")}')
+                    
+            except Exception as e:
+                errors.append(f'{file_path}: {str(e)}')
+        
+        return {
+            'success': len(errors) == 0,
+            'files_updated': len(updated_files),
+            'total_fixes': len(fixes),
+            'updated_files': updated_files,
+            'errors': errors
+        }
+    
     def create_pull_request_with_fixes(
         self,
         fixes: List[Dict[str, Any]],

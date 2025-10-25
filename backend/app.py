@@ -303,6 +303,30 @@ def apply_fix():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/apply-fixes-batch', methods=['POST'])
+def apply_fixes_batch():
+    """
+    Apply multiple fixes in a single commit to GitHub
+    Expected payload: { "fixes": [...], "agent_data": {...} }
+    """
+    try:
+        data = request.json
+        fixes = data.get('fixes', [])
+        agent_data = data.get('agent_data')
+        
+        if not fixes or not agent_data:
+            return jsonify({'error': 'Fixes and agent data are required'}), 400
+        
+        result = code_editor.apply_fixes_batch(fixes, agent_data)
+        
+        return jsonify({
+            'status': 'success',
+            'result': result
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/update-agent', methods=['POST'])
 def update_agent():
     """

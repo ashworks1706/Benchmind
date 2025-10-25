@@ -79,6 +79,15 @@ export const apiService = {
     return response.data;
   },
 
+  // Apply multiple fixes in batch (single commit)
+  applyFixesBatch: async (fixes: Fix[], agentData: AgentData) => {
+    const response = await api.post('/api/apply-fixes-batch', {
+      fixes: fixes.map(f => f.fix),
+      agent_data: agentData,
+    });
+    return response.data;
+  },
+
   // Update agent configuration
   updateAgent: async (agentId: string, updates: any) => {
     const response = await api.post('/api/update-agent', {
