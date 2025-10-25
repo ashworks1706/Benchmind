@@ -24,7 +24,7 @@ export function LandingPage() {
               Analyze your codebase, generate comprehensive test cases, and improve agent performance.
             </p>
             <Link
-              href="/dashboard"
+              href="/login"
               className="inline-flex items-center gap-2 px-8 py-4 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-lg font-medium"
             >
               <Bot className="w-5 h-5" />

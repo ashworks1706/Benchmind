@@ -7,27 +7,24 @@ import { projectService } from '@/lib/projects';
 import { Project } from '@/types/project';
 import { Button } from '@/components/ui/button';
 import { Plus, Github, LogOut, FolderGit2, Activity, Calendar, TrendingUp } from 'lucide-react';
-import { Dashboard } from '@/components/Dashboard';
 
 export default function DashboardPage() {
   const { user, loading: authLoading, logout } = useAuth();
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showProjects, setShowProjects] = useState(false);
 
   useEffect(() => {
+    // Redirect to login if not authenticated
     if (!authLoading && !user) {
-      // If not authenticated, show old dashboard (no auth required yet)
-      setLoading(false);
+      router.push('/login');
       return;
     }
 
     if (user) {
-      setShowProjects(true);
       loadProjects();
     }
-  }, [user, authLoading]);
+  }, [user, authLoading, router]);
 
   const loadProjects = async () => {
     try {
@@ -43,29 +40,11 @@ export default function DashboardPage() {
 
   const handleLogout = async () => {
     await logout();
-    setShowProjects(false);
+    router.push('/login');
   };
 
-  // Show old dashboard if not logged in
-  if (!user && !authLoading) {
-    return (
-      <div className="flex flex-col h-screen">
-        <div className="p-4 border-b border-border flex items-center justify-between">
-          <h1 className="text-xl font-bold">AI Agent Benchmark</h1>
-          <Button
-            onClick={() => router.push('/login')}
-            variant="outline"
-          >
-            <Github className="w-4 h-4 mr-2" />
-            Sign In
-          </Button>
-        </div>
-        <Dashboard />
-      </div>
-    );
-  }
-
-  if (authLoading || loading) {
+  // Show loading while checking auth or loading data
+  if (authLoading || loading || !user) {
     return (
       <div className="h-screen w-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>

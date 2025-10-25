@@ -1,0 +1,29 @@
+# Docker
+.env
+docker-compose.override.yml
+
+# Backend
+backend/venv/
+backend/__pycache__/
+backend/*.pyc
+backend/cache/
+backend/.env
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

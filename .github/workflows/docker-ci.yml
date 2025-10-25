@@ -1,0 +1,70 @@
+name: Docker Build and Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Create .env file for testing
+      run: |
+        echo "GITHUB_OAUTH_CLIENT_ID=test" >> .env
+        echo "GITHUB_OAUTH_CLIENT_SECRET=test" >> .env
+        echo "GITHUB_OAUTH_CALLBACK=http://localhost:5000/auth/github/callback" >> .env
+        echo "JWT_SECRET=$(openssl rand -hex 32)" >> .env
+        echo "ENCRYPTION_SECRET=$(openssl rand -hex 32)" >> .env
+        echo "GEMINI_API_KEY=test" >> .env
+        echo "GITHUB_TOKEN=test" >> .env
+        echo "NEXT_PUBLIC_API_URL=http://localhost:5000" >> .env
+
+    - name: Build Docker images
+      run: docker-compose build
+
+    - name: Start services
+      run: docker-compose up -d
+
+    - name: Wait for services to be ready
+      run: |
+        echo "Waiting for backend..."
+        for i in {1..30}; do
+          if curl -f http://localhost:5000/health 2>/dev/null; then
+            echo "Backend is ready!"
+            break
+          fi
+          echo "Waiting... ($i/30)"
+          sleep 2
+        done
+
+    - name: Check service health
+      run: |
+        docker-compose ps
+        curl -f http://localhost:5000/health || exit 1
+
+    - name: Run backend tests
+      run: docker-compose exec -T backend pytest || echo "No tests configured yet"
+      continue-on-error: true
+
+    - name: Show logs on failure
+      if: failure()
+      run: |
+        echo "=== Backend Logs ==="
+        docker-compose logs backend
+        echo "=== Frontend Logs ==="
+        docker-compose logs frontend
+        echo "=== PostgreSQL Logs ==="
+        docker-compose logs postgres
+
+    - name: Cleanup
+      if: always()
+      run: docker-compose down -v

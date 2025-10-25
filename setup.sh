@@ -51,7 +51,7 @@ echo "📦 Setting up frontend..."
 cd frontend
 
 echo "Installing Node.js dependencies..."
-npm install > /dev/null 2>&1
+npm install --force > /dev/null 2>&1
 
 if [ ! -f ".env.local" ]; then
     echo "Creating .env.local file..."

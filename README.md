@@ -43,7 +43,38 @@ An interactive web application that constructs an AI Agent visual editor from La
 
 ## 🛠️ Setup
 
-### Backend Setup
+### 🐳 Docker Setup (Recommended)
+
+The easiest way to run the application is using Docker:
+
+```bash
+# 1. Setup environment
+make setup
+# Edit .env and add your credentials
+
+# 2. Start all services (PostgreSQL, Backend, Frontend)
+make up
+
+# 3. Access the application
+# Frontend: http://localhost:3000
+# Backend:  http://localhost:5000
+```
+
+**Quick Docker Commands:**
+```bash
+make up           # Start all services
+make down         # Stop all services
+make logs         # View logs
+make db-init      # Initialize database
+make rebuild      # Rebuild and restart
+make help         # Show all commands
+```
+
+See [DOCKER.md](./DOCKER.md) for complete Docker documentation.
+
+### 📦 Manual Setup (Alternative)
+
+#### Backend Setup
 
 ```bash
 cd backend
@@ -55,12 +86,18 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
+# Setup PostgreSQL
+createdb ai_agent_benchmark
+
 # Setup environment variables
 cp .env.example .env
-# Edit .env and add your API keys
+# Edit .env and add your API keys + database URL
+
+# Initialize database
+python init_db.py
 ```
 
-### Frontend Setup
+#### Frontend Setup
 
 ```bash
 cd frontend
@@ -68,21 +105,35 @@ cd frontend
 # Install dependencies
 npm install
 
-# Setup environment variables
-cp .env.local.example .env.local
-# Edit .env.local if needed
+# Setup environment variables (optional)
+# Frontend will use http://localhost:5000 by default
 ```
 
 ## 🚀 Running the Application
 
-### Start Backend
+### With Docker (Recommended)
+```bash
+# Start everything
+make up
+
+# View logs
+make logs
+
+# Stop everything
+make down
+```
+
+### Manual Start
+
+#### Start Backend
 ```bash
 cd backend
+source venv/bin/activate
 python app.py
 # Backend runs on http://localhost:5000
 ```
 
-### Start Frontend
+#### Start Frontend
 ```bash
 cd frontend
 npm run dev
@@ -198,17 +249,56 @@ The framework generates 10 types of test cases:
 
 ## 🔑 Environment Variables
 
-### Backend (.env)
-```
+### Docker (.env in root directory)
+```bash
+# GitHub OAuth
+GITHUB_OAUTH_CLIENT_ID=your_client_id
+GITHUB_OAUTH_CLIENT_SECRET=your_client_secret
+GITHUB_OAUTH_CALLBACK=http://localhost:5000/auth/github/callback
+
+# Security Secrets
+JWT_SECRET=generate_with_python_secrets
+ENCRYPTION_SECRET=generate_with_python_secrets
+
+# API Keys
 GEMINI_API_KEY=your_gemini_api_key
 GITHUB_TOKEN=your_github_token
-FLASK_ENV=development
-PORT=5000
+
+# Frontend
+NEXT_PUBLIC_API_URL=http://localhost:5000
 ```
 
-### Frontend (.env.local)
+### Manual Setup - Backend (.env)
+```bash
+# Flask Configuration
+FLASK_ENV=development
+PORT=5000
+
+# Database
+DATABASE_URL=postgresql://localhost/ai_agent_benchmark
+
+# GitHub OAuth
+GITHUB_OAUTH_CLIENT_ID=your_client_id
+GITHUB_OAUTH_CLIENT_SECRET=your_client_secret
+GITHUB_OAUTH_CALLBACK=http://localhost:5000/auth/github/callback
+
+# Security
+JWT_SECRET=your_jwt_secret
+ENCRYPTION_SECRET=your_encryption_secret
+
+# API Keys
+GEMINI_API_KEY=your_gemini_api_key
+GITHUB_TOKEN=your_github_token
+```
+
+### Frontend (.env.local) - Optional
 ```
 NEXT_PUBLIC_API_URL=http://localhost:5000
+```
+
+**Generate secrets with:**
+```bash
+python3 -c "import secrets; print(secrets.token_hex(32))"
 ```
 
 ## 🤝 Contributing
