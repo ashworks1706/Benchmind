@@ -1,7 +1,7 @@
 import { Project, ProjectConfig } from '@/types/project';
 import { authService } from './auth';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 
 class ProjectService {
   async getProjects(): Promise<Project[]> {
@@ -119,7 +119,7 @@ class ProjectService {
   }
 
   async getProjectAnalyses(projectId: string): Promise<any[]> {
-    const token = authService.getAccessToken();
+    const token = authService.getUserToken();
     if (!token) throw new Error('Not authenticated');
 
     const response = await fetch(`${BACKEND_URL}/projects/${projectId}/analyses`, {

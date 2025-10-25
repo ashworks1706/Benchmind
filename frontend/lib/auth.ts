@@ -24,7 +24,7 @@ export interface GitHubRepo {
 }
 
 class AuthService {
-  private readonly BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+  private readonly BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
   
   async loginWithGitHub(): Promise<void> {
     // Redirect to backend OAuth flow
@@ -79,7 +79,7 @@ class AuthService {
   }
 
   async getGitHubRepos(): Promise<GitHubRepo[]> {
-    const token = this.getAccessToken();
+    const token = this.getUserToken();
     if (!token) throw new Error('Not authenticated');
 
     const response = await fetch(`${this.BACKEND_URL}/auth/github/repos`, {
@@ -96,7 +96,7 @@ class AuthService {
   }
 
   async refreshUserRepos(): Promise<GitHubRepo[]> {
-    const token = this.getAccessToken();
+    const token = this.getUserToken();
     if (!token) throw new Error('Not authenticated');
 
     const response = await fetch(`${this.BACKEND_URL}/auth/github/repos/refresh`, {
