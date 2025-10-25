@@ -11,6 +11,7 @@ import ReactFlow, {
   MarkerType,
   NodeMouseHandler,
   Position,
+  MiniMap,
 } from 'reactflow';
 import { useStore } from '@/lib/store';
 import { Agent, Tool, Relationship } from '@/types';
@@ -26,9 +27,9 @@ export function Canvas() {
 
     const newNodes: Node[] = [];
     const newEdges: Edge[] = [];
-    const agentSpacing = 450; // Horizontal spacing between agents
-    const toolOffsetY = 250; // Vertical offset for tools below agents
-    const toolSpacing = 160; // Horizontal spacing between tools
+    const agentSpacing = 800; // Increased horizontal spacing between agents
+    const toolOffsetY = 350; // Increased vertical offset for tools below agents
+    const toolSpacing = 200; // Increased horizontal spacing between tools
 
     // Create agent nodes in a horizontal row
     agentData.agents.forEach((agent, idx) => {
@@ -81,11 +82,13 @@ export function Canvas() {
             animated: highlightedElements.has(tool.id),
             style: { 
               stroke: '#10b981',
-              strokeWidth: 2,
+              strokeWidth: 3,
             },
             markerEnd: {
               type: MarkerType.ArrowClosed,
               color: '#10b981',
+              width: 25,
+              height: 25,
             },
           });
         }
@@ -103,20 +106,22 @@ export function Canvas() {
         label: rel.type,
         labelStyle: { 
           fill: '#ef4444',
-          fontWeight: 600,
-          fontSize: 12,
+          fontWeight: 700,
+          fontSize: 14,
         },
         labelBgStyle: {
           fill: '#1f2937',
-          fillOpacity: 0.9,
+          fillOpacity: 0.95,
         },
         style: { 
           stroke: '#ef4444',
-          strokeWidth: 3,
+          strokeWidth: 4,
         },
         markerEnd: {
           type: MarkerType.ArrowClosed,
           color: '#ef4444',
+          width: 30,
+          height: 30,
         },
         data: rel,
       });
@@ -225,18 +230,25 @@ export function Canvas() {
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={{
-          padding: 0.2,
+          padding: 0.3,
           includeHiddenNodes: false,
-          minZoom: 0.5,
-          maxZoom: 1.5,
+          minZoom: 0.3,
+          maxZoom: 1.2,
           duration: 800,
         }}
         minZoom={0.1}
         maxZoom={2}
-        defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
-        attributionPosition="bottom-right"
+        defaultViewport={{ x: 0, y: 0, zoom: 0.5 }}
         className="bg-muted/30"
         proOptions={{ hideAttribution: true }}
+        nodesDraggable={true}
+        nodesConnectable={false}
+        elementsSelectable={true}
+        panOnDrag={true}
+        zoomOnScroll={true}
+        zoomOnPinch={true}
+        panOnScroll={false}
+        preventScrolling={true}
       >
         <Background 
           gap={16} 
@@ -248,100 +260,90 @@ export function Canvas() {
           className="bg-background border border-border rounded-lg shadow-lg"
           showInteractive={false}
         />
+        <MiniMap 
+          className="bg-background border border-border rounded-lg shadow-lg"
+          nodeColor={(node) => {
+            if (node.type === 'agentNode') return '#3b82f6';
+            if (node.type === 'toolNode') return '#10b981';
+            return '#6b7280';
+          }}
+          maskColor="rgba(0, 0, 0, 0.1)"
+          nodeStrokeWidth={3}
+        />
+          <MiniMap nodeStrokeWidth={3} />
       </ReactFlow>
     </div>
   );
 }
 
-// Agent Node Component - Large Block with beautiful styling
+// Agent Node Component - Simplified with minimal info
 function AgentNodeComponent({ data }: { data: any }) {
   const isHighlighted = data.isHighlighted;
 
   return (
     <div
-      className={`group px-6 py-4 rounded-xl border-2 transition-all duration-300 cursor-pointer shadow-lg hover:shadow-2xl ${
+      className={`group px-5 py-4 rounded-xl border-2 transition-all duration-300 cursor-pointer shadow-lg hover:shadow-2xl ${
         isHighlighted
           ? 'border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 shadow-xl scale-110 ring-4 ring-yellow-400/50 animate-pulse'
           : 'border-blue-500/60 bg-linear-to-br from-blue-50 to-indigo-50 dark:from-blue-950/50 dark:to-indigo-950/50 hover:border-blue-500 hover:scale-105'
       }`}
       style={{ 
-        minWidth: '300px', 
-        minHeight: '140px',
+        minWidth: '200px',
         backdropFilter: 'blur(10px)',
       }}
     >
-      <div className="flex flex-col gap-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
-              🤖
-            </div>
-            <div>
-              <h3 className="font-bold text-lg text-blue-700 dark:text-blue-300 leading-tight">
-                {data.name}
-              </h3>
-              <span className="text-xs text-blue-600/70 dark:text-blue-400/70 font-medium">
-                {data.type}
-              </span>
-            </div>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
+            🤖
           </div>
-          <span className="text-xs px-2.5 py-1 rounded-full bg-blue-500/20 text-blue-700 dark:text-blue-300 font-semibold whitespace-nowrap border border-blue-500/30">
-            Agent
-          </span>
+          <div className="flex-1">
+            <h3 className="font-bold text-base text-blue-700 dark:text-blue-300 leading-tight">
+              {data.name}
+            </h3>
+            <span className="text-xs text-blue-600/70 dark:text-blue-400/70 font-medium">
+              {data.type}
+            </span>
+          </div>
         </div>
         
         {data.tools && data.tools.length > 0 && (
-          <div className="flex items-center gap-2 text-sm">
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-green-500/10 border border-green-500/20">
-              <span className="text-base">🔧</span>
-              <span className="font-semibold text-green-700 dark:text-green-400">
-                {data.tools.length}
-              </span>
-              <span className="text-green-600/70 dark:text-green-400/70 text-xs">
-                tools
-              </span>
-            </div>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-lg">🔧</span>
+            <span className="text-sm font-semibold text-green-700 dark:text-green-400">
+              {data.tools.length} {data.tools.length === 1 ? 'tool' : 'tools'}
+            </span>
           </div>
-        )}
-        
-        {data.objective && (
-          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-            {data.objective}
-          </p>
         )}
       </div>
     </div>
   );
 }
 
-// Tool Node Component - Small Block with beautiful styling
+// Tool Node Component - Simplified minimal display
 function ToolNodeComponent({ data }: { data: any }) {
   const isHighlighted = data.isHighlighted;
 
   return (
     <div
-      className={`group px-4 py-3 rounded-lg border-2 transition-all duration-300 cursor-pointer shadow-md hover:shadow-lg ${
+      className={`group px-3 py-2.5 rounded-lg border-2 transition-all duration-300 cursor-pointer shadow-md hover:shadow-lg ${
         isHighlighted
           ? 'border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 shadow-xl scale-110 ring-4 ring-yellow-400/50 animate-pulse'
           : 'border-green-500/60 bg-linear-to-br from-green-50 to-emerald-50 dark:from-green-950/50 dark:to-emerald-950/50 hover:border-green-500 hover:scale-105'
       }`}
       style={{ 
-        minWidth: '140px',
+        minWidth: '120px',
+        maxWidth: '140px',
         backdropFilter: 'blur(10px)',
       }}
     >
-      <div className="flex flex-col items-center gap-2">
-        <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+      <div className="flex flex-col items-center gap-1.5">
+        <div className="w-7 h-7 rounded-lg bg-green-500/20 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
           🔧
         </div>
-        <span className="text-sm font-semibold text-green-700 dark:text-green-300 text-center truncate max-w-full leading-tight">
+        <span className="text-xs font-semibold text-green-700 dark:text-green-300 text-center line-clamp-2 leading-tight">
           {data.name}
         </span>
-        {data.description && (
-          <span className="text-xs text-green-600/60 dark:text-green-400/60 text-center line-clamp-1">
-            {data.description}
-          </span>
-        )}
       </div>
     </div>
   );

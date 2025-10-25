@@ -11,8 +11,8 @@ class AgentParser:
     
     def __init__(self):
         self.model = genai.GenerativeModel('gemini-2.5-flash')
-        self.request_timeout = 300  # 5 minutes timeout
-        self.max_retries = 5  # More retries for better reliability
+        self.request_timeout = 120  # 2 minutes timeout
+        self.max_retries = 3
         
     def parse_agents(self, repo_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -112,38 +112,21 @@ Return the result as a JSON array of agent objects. Each agent object should hav
 If no agents are found, return an empty array [].
 """
         
-        for attempt in range(self.max_retries):
-            try:
-                response = self.model.generate_content(
-                    prompt,
-                    request_options={'timeout': self.request_timeout}
-                )
-                text = response.text.strip()
-                
-                # Extract JSON from response
-                json_match = re.search(r'\[.*\]', text, re.DOTALL)
-                if json_match:
-                    agents = json.loads(json_match.group())
-                    return agents
-                
-                return []
-                
-            except Exception as e:
-                error_msg = str(e)
-                if '504' in error_msg or 'timeout' in error_msg.lower() or '503' in error_msg:
-                    if attempt < self.max_retries - 1:
-                        wait_time = (attempt + 1) * 5  # Exponential backoff: 5s, 10s, 15s, 20s, 25s
-                        print(f"Timeout on attempt {attempt + 1}/{self.max_retries} for {file['path']}, waiting {wait_time}s before retry...")
-                        import time
-                        time.sleep(wait_time)
-                        continue
-                    else:
-                        print(f"Error extracting agents from {file['path']} after {self.max_retries} attempts: {error_msg}")
-                else:
-                    print(f"Error extracting agents from {file['path']}: {error_msg}")
-                return []
-        
-        return []
+        try:
+            response = self.model.generate_content(prompt)
+            text = response.text.strip()
+            
+            # Extract JSON from response
+            json_match = re.search(r'\[.*\]', text, re.DOTALL)
+            if json_match:
+                agents = json.loads(json_match.group())
+                return agents
+            
+            return []
+            
+        except Exception as e:
+            print(f"Error extracting agents from {file['path']}: {str(e)}")
+            return []
     
     def _extract_tools(self, files: List[Dict[str, Any]], agents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Extract tool definitions from the codebase"""
@@ -198,37 +181,20 @@ Return as JSON array with this structure:
 }}]
 """
         
-        for attempt in range(self.max_retries):
-            try:
-                response = self.model.generate_content(
-                    prompt,
-                    request_options={'timeout': self.request_timeout}
-                )
-                text = response.text.strip()
-                
-                json_match = re.search(r'\[.*\]', text, re.DOTALL)
-                if json_match:
-                    tools = json.loads(json_match.group())
-                    return tools
-                
-                return []
-                
-            except Exception as e:
-                error_msg = str(e)
-                if '504' in error_msg or 'timeout' in error_msg.lower() or '503' in error_msg:
-                    if attempt < self.max_retries - 1:
-                        wait_time = (attempt + 1) * 5  # Exponential backoff
-                        print(f"Timeout on attempt {attempt + 1}/{self.max_retries} for {file['path']}, waiting {wait_time}s before retry...")
-                        import time
-                        time.sleep(wait_time)
-                        continue
-                    else:
-                        print(f"Error extracting tools from {file['path']} after {self.max_retries} attempts: {error_msg}")
-                else:
-                    print(f"Error extracting tools from {file['path']}: {error_msg}")
-                return []
-        
-        return []
+        try:
+            response = self.model.generate_content(prompt)
+            text = response.text.strip()
+            
+            json_match = re.search(r'\[.*\]', text, re.DOTALL)
+            if json_match:
+                tools = json.loads(json_match.group())
+                return tools
+            
+            return []
+            
+        except Exception as e:
+            print(f"Error extracting tools from {file['path']}: {str(e)}")
+            return []
     
     def _identify_relationships(self, agents: List[Dict[str, Any]], files: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Identify relationships between agents using Gemini"""
@@ -273,34 +239,17 @@ Return as JSON array:
 }}]
 """
         
-        for attempt in range(self.max_retries):
-            try:
-                response = self.model.generate_content(
-                    prompt,
-                    request_options={'timeout': self.request_timeout}
-                )
-                text = response.text.strip()
-                
-                json_match = re.search(r'\[.*\]', text, re.DOTALL)
-                if json_match:
-                    relationships = json.loads(json_match.group())
-                    return relationships
-                
-                return []
-                
-            except Exception as e:
-                error_msg = str(e)
-                if '504' in error_msg or 'timeout' in error_msg.lower() or '503' in error_msg:
-                    if attempt < self.max_retries - 1:
-                        wait_time = (attempt + 1) * 5  # Exponential backoff
-                        print(f"Timeout on attempt {attempt + 1}/{self.max_retries} for relationships, waiting {wait_time}s before retry...")
-                        import time
-                        time.sleep(wait_time)
-                        continue
-                    else:
-                        print(f"Error identifying relationships after {self.max_retries} attempts: {error_msg}")
-                else:
-                    print(f"Error identifying relationships: {error_msg}")
-                return []
-        
-        return []
+        try:
+            response = self.model.generate_content(prompt)
+            text = response.text.strip()
+            
+            json_match = re.search(r'\[.*\]', text, re.DOTALL)
+            if json_match:
+                relationships = json.loads(json_match.group())
+                return relationships
+            
+            return []
+            
+        except Exception as e:
+            print(f"Error identifying relationships: {str(e)}")
+            return []

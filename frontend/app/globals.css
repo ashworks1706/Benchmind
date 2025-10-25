@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* ReactFlow styles - required for proper rendering */
+@import "reactflow/dist/style.css";
+
 @keyframes shimmer {
   0% {
     transform: translateX(-100%);
@@ -36,4 +39,44 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* ReactFlow custom styles for better interactivity */
+.react-flow__renderer {
+  cursor: grab;
+}
+
+.react-flow__renderer:active {
+  cursor: grabbing;
+}
+
+.react-flow__node {
+  cursor: pointer;
+}
+
+.react-flow__edge-path {
+  stroke-width: 3;
+  cursor: pointer;
+  transition: stroke-width 0.2s ease;
+}
+
+.react-flow__edge-path:hover {
+  stroke-width: 5;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke-width: 5;
+}
+
+.react-flow__edge-text {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.react-flow__controls {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.react-flow__minimap {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }

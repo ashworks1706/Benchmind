@@ -25,80 +25,6 @@ export function Dashboard() {
     reset,
   } = useStore();
 
-  const resumeAnalysis = async (analysisId: string, url: string) => {
-    const pollInterval = setInterval(async () => {
-      try {
-        const statusData = await apiService.getAnalysisStatus(analysisId);
-        
-        const stepEmojis: { [key: string]: string } = {
-          'Loading from cache': '💾',
-          'Fetching repository': '📥',
-          'Scanning files': '📄',
-          'Identifying agents': '🤖',
-          'Extracting tools': '🔧',
-          'Mapping relationships': '🔗',
-          'Complete': '✅'
-        };
-        
-        const emoji = stepEmojis[statusData.progress.name] || '⚙️';
-        
-        setAnalysisSteps((prev) => {
-          const existingIndex = prev.findIndex(s => s.step === statusData.progress.step);
-          if (existingIndex >= 0) {
-            const newSteps = [...prev];
-            newSteps[existingIndex] = statusData.progress;
-            return newSteps;
-          } else {
-            return [...prev, statusData.progress];
-          }
-        });
-        
-        if (statusData.progress.status === 'in_progress') {
-          addStatusMessage({
-            type: 'progress',
-            message: `${emoji} ${statusData.progress.message}`,
-          });
-        }
-        
-        if (statusData.status === 'success' && statusData.data) {
-          clearInterval(pollInterval);
-          
-          localStorage.removeItem('currentAnalysisId');
-          localStorage.removeItem('currentGithubUrl');
-          
-          setAgentData(statusData.data, url, statusData.from_cache);
-          
-          const cacheMsg = statusData.from_cache ? ' (from cache)' : '';
-          addStatusMessage({
-            type: 'success',
-            message: `🎉 Analysis complete${cacheMsg}! Found ${statusData.data.agents.length} agents, ${statusData.data.tools.length} tools, and ${statusData.data.relationships.length} relationships.`,
-          });
-          
-          setLoading(false);
-        } else if (statusData.status === 'error') {
-          clearInterval(pollInterval);
-          
-          localStorage.removeItem('currentAnalysisId');
-          localStorage.removeItem('currentGithubUrl');
-          
-          addStatusMessage({
-            type: 'error',
-            message: `❌ Analysis failed: ${statusData.progress.message}`,
-          });
-          
-          setLoading(false);
-        }
-      } catch (pollError: any) {
-        clearInterval(pollInterval);
-        addStatusMessage({
-          type: 'error',
-          message: `❌ Error checking status: ${pollError.message}`,
-        });
-        setLoading(false);
-      }
-    }, 500);
-  };
-
   // Load from localStorage on mount
   useEffect(() => {
     loadFromLocalStorage();
@@ -120,7 +46,7 @@ export function Dashboard() {
       // Start polling immediately
       resumeAnalysis(savedAnalysisId, savedGithubUrl);
     }
-  }, [loadFromLocalStorage, agentData, setLoading, addStatusMessage, resumeAnalysis]);
+  }, [loadFromLocalStorage]);
 
   const handleClearCache = async () => {
     try {
