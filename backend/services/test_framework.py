@@ -41,80 +41,147 @@ class TestFrameworkGenerator:
         relationships = agent_data.get('relationships', [])
         
         prompt = f"""
-You are a Testing Framework Architect AI. Your job is to create a CUSTOM testing framework specifically designed for this AI agent system.
+You are a Testing Framework Architect AI. Your job is to create a CUSTOM, DISTILLED testing framework specifically designed for this AI agent system.
+
+CRITICAL: This framework should create a LIGHTWEIGHT, FILTERED MODEL ENVIRONMENT that simulates the codebase WITHOUT executing actual code. Think of it as creating a "testing sandbox" that captures the essence of the system while being optimized for rapid testing.
 
 Agent System Overview:
-- {len(agents)} agents
-- {len(tools)} tools  
-- {len(relationships)} relationships
+- {len(agents)} agents with specific roles and capabilities
+- {len(tools)} tools with defined interfaces
+- {len(relationships)} inter-agent relationships and dependencies
 
-Agent Details:
-{json.dumps(agents, indent=2)[:2000]}
+Agent Details (Top 5):
+{json.dumps(agents[:5], indent=2)}
 
-Tool Details:
-{json.dumps(tools, indent=2)[:1500]}
+Tool Details (Top 5):
+{json.dumps(tools[:5], indent=2)}
 
 Relationships:
-{json.dumps(relationships, indent=2)[:1500]}
+{json.dumps(relationships, indent=2)}
 
-TASK: Design a lightweight testing framework that can simulate and test this specific system WITHOUT running the actual codebase.
+YOUR TASK: Design a research-grade testing framework that:
 
-Generate a framework definition that includes:
+1. **Creates a Distilled Model Environment**:
+   - Abstract away implementation details
+   - Focus on agent behavior patterns, not code execution
+   - Mock agent responses based on their prompts/configurations
+   - Simulate tool outputs based on their descriptions
 
-1. **Test Environment Setup**: How to create mock environments for these specific agents
-2. **Agent Simulation Strategy**: How to simulate agent behavior based on their configurations
-3. **Tool Mock Strategy**: How to mock tool calls without executing actual code
-4. **Relationship Testing**: How to test agent-to-agent communication
-5. **Performance Benchmarks**: Expected performance metrics for this system
-6. **Stress Test Strategy**: How to stress test these specific agents
-7. **Test Categories**: Specific test types relevant to this system
+2. **Contextual to THIS Specific Codebase**:
+   - Use actual agent names, tool names, and relationships from above
+   - Tailor test scenarios to the specific domain of these agents
+   - Generate realistic mock data relevant to this system's use cases
+
+3. **Research-Level Benchmarks**:
+   - Set benchmarks based on academic research (LangChain, AutoGPT, AutoGen studies)
+   - Include industry-standard metrics (response time < 500ms, accuracy > 90%)
+   - Reference actual research papers for credibility
+
+4. **Lightweight & Fast**:
+   - No actual code execution required
+   - All tests run in simulation mode
+   - Complete test suite should execute in < 30 seconds
 
 Return as JSON:
 {{
-    "framework_name": "Custom name based on the system",
+    "framework_name": "Custom name based on the system (e.g., 'CustomerSupportAgent-TestFramework')",
     "version": "1.0",
+    "description": "Brief description of what this system does and how this framework tests it",
+    "distillation_strategy": {{
+        "approach": "Explain how you're creating a simplified model of the system",
+        "key_abstractions": ["List", "the", "main", "abstractions"],
+        "simulation_depth": "shallow|medium|deep - how deep to simulate"
+    }},
     "agent_simulation": {{
-        "strategy": "How to simulate agents",
-        "mock_responses": ["Example mock responses based on agent prompts"],
-        "execution_steps": ["Step 1: ...", "Step 2: ..."]
+        "strategy": "Detailed strategy for simulating agent behavior WITHOUT running code",
+        "mock_response_generation": {{
+            "based_on_prompt": "How to generate responses from agent prompts",
+            "based_on_role": "How agent roles influence behavior",
+            "example_responses": {{
+                "{agents[0].get('name', 'agent1') if agents else 'agent1'}": [
+                    "Example response 1",
+                    "Example response 2"
+                ]
+            }}
+        }},
+        "execution_steps": [
+            "Step 1: Parse agent configuration",
+            "Step 2: Generate mock context",
+            "Step 3: Simulate reasoning process",
+            "Step 4: Return simulated output"
+        ]
     }},
     "tool_mocking": {{
-        "strategy": "How to mock tools",
-        "tool_templates": {{
-            "tool_name": {{
-                "mock_input": "example",
-                "mock_output": "example",
-                "execution_time_ms": 100
+        "strategy": "How to mock tool calls without executing actual functions",
+        "contextual_mocks": {{
+            "{tools[0].get('name', 'tool1') if tools else 'tool1'}": {{
+                "description": "{tools[0].get('description', 'A tool') if tools else 'A tool'}",
+                "mock_input_example": "Realistic input for this specific tool",
+                "mock_output_example": "Realistic output based on tool's purpose",
+                "execution_time_ms": 50,
+                "success_rate": 0.95
             }}
         }}
     }},
     "test_categories": [
         {{
             "name": "tool_calling",
-            "description": "Tests specific to this system's tool usage",
+            "description": "Tests tool selection accuracy for THIS specific system",
             "benchmark": 95,
-            "test_strategy": "How to test this category",
-            "relevant_agents": ["agent_id_1"]
+            "unit": "%",
+            "research_basis": "ReAct: Synergizing Reasoning and Acting (Yao et al., 2023)",
+            "test_strategy": "Simulate scenarios where agents must choose between available tools",
+            "relevant_agents": ["{agents[0].get('name', 'agent1') if agents else 'agent1'}"],
+            "sample_test_scenarios": [
+                "Scenario 1 specific to this system",
+                "Scenario 2 specific to this system"
+            ]
+        }},
+        {{
+            "name": "reasoning",
+            "description": "Evaluates chain-of-thought quality in THIS system's context",
+            "benchmark": 85,
+            "unit": "%",
+            "research_basis": "Chain-of-Thought Prompting (Wei et al., 2022)",
+            "test_strategy": "Analyze simulated reasoning patterns",
+            "relevant_agents": ["all"],
+            "sample_test_scenarios": ["Complex reasoning scenario for this domain"]
+        }},
+        {{
+            "name": "response_time",
+            "description": "Performance benchmarks for THIS system",
+            "benchmark": 500,
+            "unit": "ms",
+            "research_basis": "OpenAI/Anthropic Production Guidelines",
+            "test_strategy": "Simulate latency based on agent complexity",
+            "relevant_agents": ["all"]
         }}
     ],
     "performance_benchmarks": {{
         "response_time_ms": 500,
-        "tool_accuracy_pct": 95,
+        "tool_accuracy_percent": 90,
         "reasoning_score": 85,
-        "collaboration_efficiency": 90
+        "collaboration_efficiency": 85,
+        "throughput_requests_per_second": 10
     }},
     "stress_test_config": {{
-        "iterations": 10,
-        "concurrent_tests": 3,
-        "timeout_ms": 5000
+        "max_concurrent_agents": {min(len(agents) * 2, 20)},
+        "test_duration_seconds": 10,
+        "failure_injection_rate": 0.1
     }},
     "relationship_testing": {{
-        "strategy": "How to test agent interactions",
-        "test_scenarios": ["Scenario 1", "Scenario 2"]
+        "strategy": "How to test inter-agent communication in simulation",
+        "test_flows": [
+            {{
+                "name": "End-to-end flow test",
+                "agents_involved": ["{agents[0].get('name', 'agent1') if agents else 'agent1'}"],
+                "expected_outcome": "Description of expected behavior"
+            }}
+        ]
     }}
 }}
 
-Make it SPECIFIC to this codebase - reference actual agent names, tool types, and relationship patterns.
+REMEMBER: This is a DISTILLED, FILTERED testing environment - NOT actual code execution. Everything is simulated based on configurations and descriptions.
 """
         
         try:
