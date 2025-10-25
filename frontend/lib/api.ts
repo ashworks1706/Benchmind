@@ -26,9 +26,10 @@ export const apiService = {
   },
 
   // Start repository analysis (non-blocking, returns analysis_id)
-  startAnalysis: async (githubUrl: string): Promise<string> => {
+  startAnalysis: async (githubUrl: string, projectId?: string): Promise<string> => {
     const response = await api.post('/api/analyze-repo', {
       github_url: githubUrl,
+      project_id: projectId,
     });
     return response.data.analysis_id;
   },

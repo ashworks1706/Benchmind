@@ -180,7 +180,7 @@ export default function ProjectDetailPage() {
         message: `🚀 Starting analysis of ${project.repoUrl}`,
       });
 
-      const analysisId = await apiService.startAnalysis(project.repoUrl);
+      const analysisId = await apiService.startAnalysis(project.repoUrl, projectId);
       
       // Save analysis ID to project
       await projectService.updateProject(projectId, {
