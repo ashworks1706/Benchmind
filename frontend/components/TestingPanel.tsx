@@ -18,7 +18,6 @@ import {
   BarChart3
 } from 'lucide-react';
 
-export default function TestingPanel() {
   export default function TestingPanel() {
   const {
     agentData,

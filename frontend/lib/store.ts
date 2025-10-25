@@ -36,6 +36,15 @@ interface AppState {
   isTestingInProgress: boolean;
   currentTestIndex: number;
   
+  // Change Queue
+  queuedChanges: Array<{
+    id: string;
+    type: 'edit' | 'fix';
+    description: string;
+    data: any;
+    timestamp: number;
+  }>;
+  
   // Actions
   setAgentData: (data: AgentData, repoUrl?: string, fromCache?: boolean) => void;
   setCurrentAnalysisId: (id: string | null) => void;
