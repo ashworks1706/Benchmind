@@ -37,23 +37,30 @@ export function Canvas() {
   // Use pendingTestCases or testCases - whichever has data
   const activeTestCases = pendingTestCases.length > 0 ? pendingTestCases : testCases;
 
-  // Build graph from agent data
+  // Build graph from agent data with alternating zigzag pattern
   useEffect(() => {
     if (!agentData) return;
 
     const newNodes: CanvasNode[] = [];
     const nodeMap = new Map<string, CanvasNode>();
-    const agentSpacing = 800;
-    const toolOffsetY = 350;
-    const toolSpacing = 200;
-
-    // Create agent nodes
+    
+    // Spacing configuration for alternating pattern
+    const horizontalSpacing = 400; // Space between columns
+    const verticalSpacing = 300; // Space between rows
+    const toolOffsetX = 250; // Offset tools to the right of agents
+    const toolSpacing = 180; // Vertical space between tools
+    
+    // Create agent nodes in alternating up/down pattern
     agentData.agents.forEach((agent, idx) => {
+      // Alternate between top (y=100) and bottom (y=100+verticalSpacing)
+      const isTopRow = idx % 2 === 0;
+      const col = Math.floor(idx / 2); // Two agents per column pair
+      
       const node: CanvasNode = {
         id: agent.id,
         type: 'agent',
-        x: idx * agentSpacing,
-        y: 100,
+        x: 100 + (col * horizontalSpacing * 2) + (isTopRow ? 0 : horizontalSpacing),
+        y: isTopRow ? 100 : 100 + verticalSpacing,
         width: 200,
         height: 120,
         data: agent,
@@ -61,24 +68,22 @@ export function Canvas() {
       newNodes.push(node);
       nodeMap.set(agent.id, node);
 
-      // Create tool nodes below each agent
+      // Create tool nodes to the right of each agent (stacked vertically)
       const agentTools = agent.tools
         .map(toolName => agentData.tools.find(t => t.name === toolName))
         .filter(Boolean) as Tool[];
 
       agentTools.forEach((tool, toolIdx) => {
         const toolNodeId = `${agent.id}-tool-${tool.id}`;
-        const totalToolsWidth = (agentTools.length - 1) * toolSpacing;
-        const startX = idx * agentSpacing - totalToolsWidth / 2;
-
+        
         const toolNode: CanvasNode = {
           id: toolNodeId,
           type: 'tool',
-          x: startX + (toolIdx * toolSpacing),
-          y: 100 + toolOffsetY,
+          x: node.x + node.width + toolOffsetX,
+          y: node.y + (toolIdx * toolSpacing),
           width: 130,
           height: 80,
-          data: { ...tool, parentAgentId: agent.id }, // Store parent agent ID
+          data: { ...tool, parentAgentId: agent.id },
         };
         newNodes.push(toolNode);
         nodeMap.set(toolNodeId, toolNode);
@@ -130,7 +135,7 @@ export function Canvas() {
     setEdges(newEdges);
   }, [agentData]);
 
-  // Add test nodes when test cases are available
+  // Add test nodes when test cases are available with alternating pattern
   useEffect(() => {
     if (!activeTestCases || activeTestCases.length === 0 || !agentData) return;
 
@@ -138,21 +143,25 @@ export function Canvas() {
       // Remove old test nodes
       const nonTestNodes = prevNodes.filter(n => n.type !== 'test');
       
-      // Create test nodes on the right side of the canvas
+      // Calculate the rightmost position from existing nodes
+      const maxX = nonTestNodes.reduce((max, node) => Math.max(max, node.x + node.width), 0);
+      
+      // Create test nodes in alternating zigzag pattern to the right
       const testNodes: CanvasNode[] = [];
-      const testStartX = 1200; // Start tests to the right
-      const testSpacing = 150;
-      const testsPerColumn = 5;
+      const testStartX = maxX + 300; // Start tests well to the right of existing nodes
+      const horizontalSpacing = 250; // Space between columns
+      const verticalSpacing = 180; // Space between rows
       
       activeTestCases.forEach((testCase, idx) => {
-        const col = Math.floor(idx / testsPerColumn);
-        const row = idx % testsPerColumn;
+        // Alternate between top and bottom rows
+        const isTopRow = idx % 2 === 0;
+        const col = Math.floor(idx / 2); // Two tests per column pair
         
         const testNode: CanvasNode = {
           id: `test-${testCase.id}`,
           type: 'test',
-          x: testStartX + (col * 220),
-          y: 100 + (row * testSpacing),
+          x: testStartX + (col * horizontalSpacing * 2) + (isTopRow ? 0 : horizontalSpacing),
+          y: isTopRow ? 100 : 100 + verticalSpacing,
           width: 180,
           height: 100,
           data: testCase,
