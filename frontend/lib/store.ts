@@ -12,6 +12,7 @@ interface AppState {
   // Data
   agentData: AgentData | null;
   currentRepoUrl: string | null;
+  currentAnalysisId: string | null;
   testCases: TestCase[];
   testResults: Map<string, TestResult>;
   analysisSteps: any[];
@@ -29,6 +30,7 @@ interface AppState {
   
   // Actions
   setAgentData: (data: AgentData, repoUrl?: string, fromCache?: boolean) => void;
+  setCurrentAnalysisId: (id: string | null) => void;
   setTestCases: (cases: TestCase[]) => void;
   addTestResult: (result: TestResult) => void;
   setLoading: (loading: boolean, message?: string) => void;
@@ -50,6 +52,7 @@ export const useStore = create<AppState>((set) => ({
   // Initial state
   agentData: null,
   currentRepoUrl: null,
+  currentAnalysisId: null,
   testCases: [],
   testResults: new Map(),
   analysisSteps: [],
@@ -75,6 +78,17 @@ export const useStore = create<AppState>((set) => ({
       localStorage.setItem('lastAnalysis', new Date().toISOString());
     }
     set({ agentData: data, currentRepoUrl: repoUrl || null, fromCache });
+  },
+  
+  setCurrentAnalysisId: (id) => {
+    if (typeof window !== 'undefined') {
+      if (id) {
+        localStorage.setItem('currentAnalysisId', id);
+      } else {
+        localStorage.removeItem('currentAnalysisId');
+      }
+    }
+    set({ currentAnalysisId: id });
   },
   
   setTestCases: (cases) => set({ testCases: cases }),
@@ -128,6 +142,7 @@ export const useStore = create<AppState>((set) => ({
       try {
         const savedData = localStorage.getItem('agentData');
         const savedUrl = localStorage.getItem('currentRepoUrl');
+        const savedAnalysisId = localStorage.getItem('currentAnalysisId');
         const savedFromCache = localStorage.getItem('fromCache') === 'true';
         
         if (savedData) {
@@ -135,8 +150,12 @@ export const useStore = create<AppState>((set) => ({
           set({ 
             agentData: data, 
             currentRepoUrl: savedUrl,
+            currentAnalysisId: savedAnalysisId,
             fromCache: savedFromCache
           });
+        } else if (savedAnalysisId) {
+          // If we have an analysis ID but no data, we can resume
+          set({ currentAnalysisId: savedAnalysisId });
         }
       } catch (error) {
         console.error('Error loading from localStorage:', error);
@@ -148,6 +167,7 @@ export const useStore = create<AppState>((set) => ({
     if (typeof window !== 'undefined') {
       localStorage.removeItem('agentData');
       localStorage.removeItem('currentRepoUrl');
+      localStorage.removeItem('currentAnalysisId');
       localStorage.removeItem('fromCache');
       localStorage.removeItem('lastAnalysis');
     }
@@ -157,12 +177,14 @@ export const useStore = create<AppState>((set) => ({
     if (typeof window !== 'undefined') {
       localStorage.removeItem('agentData');
       localStorage.removeItem('currentRepoUrl');
+      localStorage.removeItem('currentAnalysisId');
       localStorage.removeItem('fromCache');
       localStorage.removeItem('lastAnalysis');
     }
     set({
       agentData: null,
       currentRepoUrl: null,
+      currentAnalysisId: null,
       testCases: [],
       testResults: new Map(),
       analysisSteps: [],

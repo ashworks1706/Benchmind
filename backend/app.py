@@ -28,6 +28,8 @@ cache_manager = CacheManager()
 analysis_progress = {}
 # Store repository URLs for each analysis
 analysis_urls = {}
+# Store partial results during analysis
+analysis_partial_data = {}
 
 def run_analysis_async(analysis_id, github_url):
     """Run analysis in background thread and update progress"""
@@ -89,6 +91,14 @@ def run_analysis_async(analysis_id, github_url):
         }
         
         agent_data = agent_parser.parse_agents(repo_data)
+        
+        # Store partial data
+        analysis_partial_data[analysis_id] = {
+            'agents': agent_data.get('agents', []),
+            'tools': agent_data.get('tools', []),
+            'relationships': agent_data.get('relationships', []),
+            'repository': agent_data.get('repository', {}),
+        }
         
         # Step 4: Extracting tools
         analysis_progress[analysis_id] = {
@@ -200,10 +210,12 @@ def get_analysis_status(analysis_id):
                 'message': progress['message'],
                 'total_steps': progress['total_steps']
             },
-            'data': progress['data']
+            'data': progress['data'],
+            'from_cache': progress.get('from_cache', False)
         }), 200
     
-    return jsonify({
+    # Include partial data if available (for recovery on reload)
+    response = {
         'status': 'in_progress' if progress['status'] == 'in_progress' else progress['status'],
         'progress': {
             'step': progress['step'],
@@ -212,7 +224,13 @@ def get_analysis_status(analysis_id):
             'message': progress['message'],
             'total_steps': progress['total_steps']
         }
-    }), 200
+    }
+    
+    # Add partial data if analysis is in progress
+    if analysis_id in analysis_partial_data:
+        response['partial_data'] = analysis_partial_data[analysis_id]
+    
+    return jsonify(response), 200
 
 @app.route('/api/generate-tests', methods=['POST'])
 def generate_tests():
