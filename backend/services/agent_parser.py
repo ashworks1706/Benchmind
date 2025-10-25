@@ -10,7 +10,7 @@ class AgentParser:
     """Service for parsing LangChain agents from repository code"""
     
     def __init__(self):
-        self.model = genai.GenerativeModel('gemini-pro')
+        self.model = genai.GenerativeModel('gemini-2.5-flash')
         
     def parse_agents(self, repo_data: Dict[str, Any]) -> Dict[str, Any]:
         """

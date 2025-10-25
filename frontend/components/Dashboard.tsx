@@ -6,7 +6,7 @@ import { apiService } from '@/lib/api';
 import { Canvas } from './Canvas';
 import { StatusPanel } from './StatusPanel';
 import { DetailsPanel } from './DetailsPanel';
-import { LoaderCircle } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 export function Dashboard() {
   const [githubUrl, setGithubUrl] = useState('');
@@ -80,7 +80,7 @@ export function Dashboard() {
                 >
                   {isLoading ? (
                     <span className="flex items-center justify-center gap-2">
-                      <LoaderCircle className="w-4 h-4 animate-spin" />
+                      <Loader2 className="w-4 h-4 animate-spin" />
                       Analyzing...
                     </span>
                   ) : (

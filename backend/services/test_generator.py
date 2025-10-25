@@ -9,7 +9,7 @@ class TestGenerator:
     """Service for generating and running test cases for AI agents"""
     
     def __init__(self):
-        self.model = genai.GenerativeModel('gemini-pro')
+        self.model = genai.GenerativeModel('gemini-2.5-flash')
         
     def generate_test_cases(self, agent_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
