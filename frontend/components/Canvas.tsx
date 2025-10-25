@@ -26,14 +26,16 @@ export function Canvas() {
 
     const newNodes: Node[] = [];
     const newEdges: Edge[] = [];
-    const nodeSpacing = 400;
+    const agentSpacing = 450; // Horizontal spacing between agents
+    const toolOffsetY = 250; // Vertical offset for tools below agents
+    const toolSpacing = 160; // Horizontal spacing between tools
 
-    // Create agent nodes (large blocks)
+    // Create agent nodes in a horizontal row
     agentData.agents.forEach((agent, idx) => {
       newNodes.push({
         id: agent.id,
         type: 'agentNode',
-        position: { x: idx * nodeSpacing, y: 100 },
+        position: { x: idx * agentSpacing, y: 100 },
         data: { 
           ...agent,
           isHighlighted: highlightedElements.has(agent.id)
@@ -42,31 +44,35 @@ export function Canvas() {
         targetPosition: Position.Top,
       });
 
-      // Create tool nodes for this agent
-      agent.tools.forEach((toolName, toolIdx) => {
-        const tool = agentData.tools.find(t => t.name === toolName);
+      // Create tool nodes below each agent
+      const agentTools = agent.tools.map(toolName => 
+        agentData.tools.find(t => t.name === toolName)
+      ).filter(Boolean);
+
+      agentTools.forEach((tool, toolIdx) => {
         if (tool) {
           const toolNodeId = `${agent.id}-tool-${tool.id}`;
           
-          // Only add tool node if not already added
-          if (!newNodes.find(n => n.id === toolNodeId)) {
-            newNodes.push({
-              id: toolNodeId,
-              type: 'toolNode',
-              position: { 
-                x: idx * nodeSpacing - 100 + (toolIdx * 80), 
-                y: 300 
-              },
-              data: { 
-                ...tool,
-                isHighlighted: highlightedElements.has(tool.id)
-              },
-              sourcePosition: Position.Bottom,
-              targetPosition: Position.Top,
-            });
-          }
+          // Calculate tool position: centered under agent, spread horizontally
+          const totalToolsWidth = (agentTools.length - 1) * toolSpacing;
+          const startX = idx * agentSpacing - totalToolsWidth / 2;
+          
+          newNodes.push({
+            id: toolNodeId,
+            type: 'toolNode',
+            position: { 
+              x: startX + (toolIdx * toolSpacing), 
+              y: 100 + toolOffsetY 
+            },
+            data: { 
+              ...tool,
+              isHighlighted: highlightedElements.has(tool.id)
+            },
+            sourcePosition: Position.Bottom,
+            targetPosition: Position.Top,
+          });
 
-          // Add edge from agent to tool
+          // Add edge from agent to tool (green, vertical)
           newEdges.push({
             id: `${agent.id}-${toolNodeId}`,
             source: agent.id,
@@ -86,7 +92,7 @@ export function Canvas() {
       });
     });
 
-    // Create edges for agent relationships
+    // Create edges for agent relationships (horizontal, red)
     agentData.relationships.forEach((rel) => {
       newEdges.push({
         id: rel.id,
@@ -208,7 +214,7 @@ export function Canvas() {
   };
 
   return (
-    <div className="h-full">
+    <div className="h-full w-full animate-in fade-in duration-700">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -218,63 +224,124 @@ export function Canvas() {
         onEdgeClick={onEdgeClick}
         nodeTypes={nodeTypes}
         fitView
-        minZoom={0.2}
+        fitViewOptions={{
+          padding: 0.2,
+          includeHiddenNodes: false,
+          minZoom: 0.5,
+          maxZoom: 1.5,
+          duration: 800,
+        }}
+        minZoom={0.1}
         maxZoom={2}
+        defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
+        attributionPosition="bottom-right"
+        className="bg-muted/30"
+        proOptions={{ hideAttribution: true }}
       >
-        <Background />
-        <Controls />
+        <Background 
+          gap={16} 
+          size={1}
+          color="#333"
+          className="opacity-30"
+        />
+        <Controls 
+          className="bg-background border border-border rounded-lg shadow-lg"
+          showInteractive={false}
+        />
       </ReactFlow>
     </div>
   );
 }
 
-// Agent Node Component - Large Block
+// Agent Node Component - Large Block with beautiful styling
 function AgentNodeComponent({ data }: { data: any }) {
   const isHighlighted = data.isHighlighted;
 
   return (
     <div
-      className={`px-6 py-4 rounded-xl border-2 transition-all cursor-pointer ${
+      className={`group px-6 py-4 rounded-xl border-2 transition-all duration-300 cursor-pointer shadow-lg hover:shadow-2xl ${
         isHighlighted
-          ? 'border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 shadow-xl scale-110 ring-4 ring-yellow-400/50'
-          : 'border-primary/60 bg-card hover:border-primary hover:shadow-lg'
+          ? 'border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 shadow-xl scale-110 ring-4 ring-yellow-400/50 animate-pulse'
+          : 'border-blue-500/60 bg-linear-to-br from-blue-50 to-indigo-50 dark:from-blue-950/50 dark:to-indigo-950/50 hover:border-blue-500 hover:scale-105'
       }`}
-      style={{ minWidth: '280px', minHeight: '120px' }}
+      style={{ 
+        minWidth: '300px', 
+        minHeight: '140px',
+        backdropFilter: 'blur(10px)',
+      }}
     >
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <h3 className="font-bold text-lg text-primary">{data.name}</h3>
-          <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary">
+      <div className="flex flex-col gap-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
+              🤖
+            </div>
+            <div>
+              <h3 className="font-bold text-lg text-blue-700 dark:text-blue-300 leading-tight">
+                {data.name}
+              </h3>
+              <span className="text-xs text-blue-600/70 dark:text-blue-400/70 font-medium">
+                {data.type}
+              </span>
+            </div>
+          </div>
+          <span className="text-xs px-2.5 py-1 rounded-full bg-blue-500/20 text-blue-700 dark:text-blue-300 font-semibold whitespace-nowrap border border-blue-500/30">
             Agent
           </span>
         </div>
+        
         {data.tools && data.tools.length > 0 && (
-          <div className="text-xs text-muted-foreground flex items-center gap-1">
-            <span className="font-medium">{data.tools.length}</span> tools
+          <div className="flex items-center gap-2 text-sm">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-green-500/10 border border-green-500/20">
+              <span className="text-base">🔧</span>
+              <span className="font-semibold text-green-700 dark:text-green-400">
+                {data.tools.length}
+              </span>
+              <span className="text-green-600/70 dark:text-green-400/70 text-xs">
+                tools
+              </span>
+            </div>
           </div>
+        )}
+        
+        {data.objective && (
+          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+            {data.objective}
+          </p>
         )}
       </div>
     </div>
   );
 }
 
-// Tool Node Component - Small Block
+// Tool Node Component - Small Block with beautiful styling
 function ToolNodeComponent({ data }: { data: any }) {
   const isHighlighted = data.isHighlighted;
 
   return (
     <div
-      className={`px-3 py-2 rounded-lg border-2 transition-all cursor-pointer ${
+      className={`group px-4 py-3 rounded-lg border-2 transition-all duration-300 cursor-pointer shadow-md hover:shadow-lg ${
         isHighlighted
-          ? 'border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 shadow-xl scale-110 ring-4 ring-yellow-400/50'
-          : 'border-green-500/60 bg-card hover:border-green-500 hover:shadow-md'
+          ? 'border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 shadow-xl scale-110 ring-4 ring-yellow-400/50 animate-pulse'
+          : 'border-green-500/60 bg-linear-to-br from-green-50 to-emerald-50 dark:from-green-950/50 dark:to-emerald-950/50 hover:border-green-500 hover:scale-105'
       }`}
-      style={{ minWidth: '100px' }}
+      style={{ 
+        minWidth: '140px',
+        backdropFilter: 'blur(10px)',
+      }}
     >
-      <div className="flex flex-col items-center gap-1">
-        <span className="text-xs font-semibold text-green-600 dark:text-green-400 truncate max-w-full">
+      <div className="flex flex-col items-center gap-2">
+        <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+          🔧
+        </div>
+        <span className="text-sm font-semibold text-green-700 dark:text-green-300 text-center truncate max-w-full leading-tight">
           {data.name}
         </span>
+        {data.description && (
+          <span className="text-xs text-green-600/60 dark:text-green-400/60 text-center line-clamp-1">
+            {data.description}
+          </span>
+        )}
       </div>
     </div>
   );
