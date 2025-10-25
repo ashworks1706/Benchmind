@@ -10,6 +10,7 @@ from services.github_scraper import GitHubScraper
 from services.agent_parser import AgentParser
 from services.test_generator import TestGenerator
 from services.code_editor import CodeEditor
+from services.cache_manager import CacheManager
 
 load_dotenv()
 
@@ -21,13 +22,41 @@ github_scraper = GitHubScraper()
 agent_parser = AgentParser()
 test_generator = TestGenerator()
 code_editor = CodeEditor()
+cache_manager = CacheManager()
 
 # Store analysis progress in memory (in production, use Redis or similar)
 analysis_progress = {}
+# Store repository URLs for each analysis
+analysis_urls = {}
 
 def run_analysis_async(analysis_id, github_url):
     """Run analysis in background thread and update progress"""
     try:
+        # Check cache first
+        cached_data = cache_manager.get(github_url)
+        
+        if cached_data:
+            # Return cached data immediately
+            analysis_progress[analysis_id] = {
+                'step': 1,
+                'name': 'Loading from cache',
+                'status': 'in_progress',
+                'message': 'Found cached analysis...',
+                'total_steps': 5
+            }
+            time.sleep(0.5)
+            
+            analysis_progress[analysis_id] = {
+                'step': 5,
+                'name': 'Complete',
+                'status': 'completed',
+                'message': f'✨ Loaded from cache! Found {len(cached_data["agents"])} agents, {len(cached_data["tools"])} tools, {len(cached_data["relationships"])} relationships',
+                'total_steps': 5,
+                'data': cached_data,
+                'from_cache': True
+            }
+            return
+        
         # Step 1: Fetching repository
         analysis_progress[analysis_id] = {
             'step': 1,
@@ -81,6 +110,9 @@ def run_analysis_async(analysis_id, github_url):
         }
         time.sleep(0.5)
         
+        # Cache the results
+        cache_manager.set(github_url, agent_data)
+        
         # Complete
         analysis_progress[analysis_id] = {
             'step': 5,
@@ -88,7 +120,8 @@ def run_analysis_async(analysis_id, github_url):
             'status': 'completed',
             'message': f'Analysis complete! Found {len(agent_data["agents"])} agents, {len(agent_data["tools"])} tools, {len(agent_data["relationships"])} relationships',
             'total_steps': 5,
-            'data': agent_data
+            'data': agent_data,
+            'from_cache': False
         }
         
     except Exception as e:
@@ -120,6 +153,9 @@ def analyze_repository():
         
         # Generate unique analysis ID
         analysis_id = str(uuid.uuid4())
+        
+        # Store URL for this analysis
+        analysis_urls[analysis_id] = github_url
         
         # Initialize progress
         analysis_progress[analysis_id] = {
@@ -268,6 +304,60 @@ def update_agent():
         return jsonify({
             'status': 'success',
             'updated_agent': updated_agent
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/cache/list', methods=['GET'])
+def list_cached_repos():
+    """
+    List all cached repositories
+    """
+    try:
+        cached_repos = cache_manager.get_all_cached_repos()
+        return jsonify({
+            'status': 'success',
+            'cached_repos': cached_repos
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/cache/invalidate', methods=['POST'])
+def invalidate_cache():
+    """
+    Invalidate cache for a specific GitHub URL
+    Expected payload: { "github_url": "..." }
+    """
+    try:
+        data = request.json
+        github_url = data.get('github_url')
+        
+        if not github_url:
+            return jsonify({'error': 'GitHub URL is required'}), 400
+        
+        success = cache_manager.invalidate(github_url)
+        
+        return jsonify({
+            'status': 'success',
+            'invalidated': success
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/cache/clear', methods=['POST'])
+def clear_cache():
+    """
+    Clear all cached data
+    """
+    try:
+        cache_manager.clear_all()
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'All cache cleared'
         }), 200
         
     except Exception as e:

@@ -1,12 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useStore } from '@/lib/store';
 import { apiService } from '@/lib/api';
 import { Canvas } from './Canvas';
 import { StatusPanel } from './StatusPanel';
 import { DetailsPanel } from './DetailsPanel';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Database, Trash2 } from 'lucide-react';
 
 export function Dashboard() {
   const [githubUrl, setGithubUrl] = useState('');
@@ -19,7 +19,34 @@ export function Dashboard() {
     panelView,
     setAnalysisSteps,
     selectedElement,
+    currentRepoUrl,
+    fromCache,
+    loadFromLocalStorage,
+    reset,
   } = useStore();
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    loadFromLocalStorage();
+  }, [loadFromLocalStorage]);
+
+  const handleClearCache = async () => {
+    try {
+      if (currentRepoUrl) {
+        await apiService.invalidateCache(currentRepoUrl);
+      }
+      reset();
+      addStatusMessage({
+        type: 'success',
+        message: '🗑️ Cache cleared successfully',
+      });
+    } catch (error: any) {
+      addStatusMessage({
+        type: 'error',
+        message: `Failed to clear cache: ${error.message}`,
+      });
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,13 +77,13 @@ export function Dashboard() {
           const statusData = await apiService.getAnalysisStatus(analysisId);
           
           const stepEmojis: { [key: string]: string } = {
-            'Starting': '⚡',
-            'Fetching repository': '📦',
-            'Scanning files': '🔍',
+            'Loading from cache': '💾',
+            'Fetching repository': '�',
+            'Scanning files': '�',
             'Identifying agents': '🤖',
             'Extracting tools': '🔧',
             'Mapping relationships': '🔗',
-            'Complete': '🎉',
+            'Complete': '✅'
           };
           
           const emoji = stepEmojis[statusData.progress.name] || '⚡';
@@ -90,10 +117,12 @@ export function Dashboard() {
           if (statusData.status === 'completed' && statusData.data) {
             clearInterval(pollInterval);
             
-            setAgentData(statusData.data);
+            setAgentData(statusData.data, githubUrl, statusData.from_cache);
+            
+            const cacheMsg = statusData.from_cache ? ' (from cache)' : '';
             addStatusMessage({
               type: 'success',
-              message: `🎉 Analysis complete! Found ${statusData.data.agents.length} agents, ${statusData.data.tools.length} tools, and ${statusData.data.relationships.length} relationships.`,
+              message: `🎉 Analysis complete${cacheMsg}! Found ${statusData.data.agents.length} agents, ${statusData.data.tools.length} tools, and ${statusData.data.relationships.length} relationships.`,
             });
             
             setLoading(false);
@@ -169,7 +198,29 @@ export function Dashboard() {
             </div>
           </div>
         ) : (
-          <Canvas />
+          <>
+            <Canvas />
+            
+            {/* Cache status badge */}
+            {agentData && (
+              <div className="absolute top-4 left-4 flex items-center gap-2">
+                {fromCache && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 border border-green-500/30 rounded-md text-green-600 dark:text-green-400 text-sm">
+                    <Database className="w-4 h-4" />
+                    <span>Cached</span>
+                  </div>
+                )}
+                <button
+                  onClick={handleClearCache}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 border border-red-500/30 rounded-md text-red-600 dark:text-red-400 text-sm hover:bg-red-500/20 transition-colors"
+                  title="Clear cache and reset"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Clear</span>
+                </button>
+              </div>
+            )}
+          </>
         )}
         
         {/* Details Panel Overlay - appears on top of canvas when item is selected */}

@@ -11,9 +11,11 @@ import {
 interface AppState {
   // Data
   agentData: AgentData | null;
+  currentRepoUrl: string | null;
   testCases: TestCase[];
   testResults: Map<string, TestResult>;
   analysisSteps: any[];
+  fromCache: boolean;
   
   // UI State
   isLoading: boolean;
@@ -26,7 +28,7 @@ interface AppState {
   currentTestIndex: number;
   
   // Actions
-  setAgentData: (data: AgentData) => void;
+  setAgentData: (data: AgentData, repoUrl?: string, fromCache?: boolean) => void;
   setTestCases: (cases: TestCase[]) => void;
   addTestResult: (result: TestResult) => void;
   setLoading: (loading: boolean, message?: string) => void;
@@ -39,15 +41,19 @@ interface AppState {
   stopTesting: () => void;
   setCurrentTestIndex: (index: number) => void;
   setAnalysisSteps: (steps: any[] | ((prev: any[]) => any[])) => void;
+  loadFromLocalStorage: () => void;
+  clearLocalStorage: () => void;
   reset: () => void;
 }
 
 export const useStore = create<AppState>((set) => ({
   // Initial state
   agentData: null,
+  currentRepoUrl: null,
   testCases: [],
   testResults: new Map(),
   analysisSteps: [],
+  fromCache: false,
   isLoading: false,
   loadingMessage: '',
   statusMessages: [],
@@ -58,7 +64,18 @@ export const useStore = create<AppState>((set) => ({
   currentTestIndex: -1,
 
   // Actions
-  setAgentData: (data) => set({ agentData: data }),
+  setAgentData: (data, repoUrl?: string, fromCache = false) => {
+    // Save to localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('agentData', JSON.stringify(data));
+      if (repoUrl) {
+        localStorage.setItem('currentRepoUrl', repoUrl);
+      }
+      localStorage.setItem('fromCache', String(fromCache));
+      localStorage.setItem('lastAnalysis', new Date().toISOString());
+    }
+    set({ agentData: data, currentRepoUrl: repoUrl || null, fromCache });
+  },
   
   setTestCases: (cases) => set({ testCases: cases }),
   
@@ -106,12 +123,50 @@ export const useStore = create<AppState>((set) => ({
       analysisSteps: typeof steps === 'function' ? steps(state.analysisSteps) : steps
     })),
   
-  reset: () =>
+  loadFromLocalStorage: () => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedData = localStorage.getItem('agentData');
+        const savedUrl = localStorage.getItem('currentRepoUrl');
+        const savedFromCache = localStorage.getItem('fromCache') === 'true';
+        
+        if (savedData) {
+          const data = JSON.parse(savedData);
+          set({ 
+            agentData: data, 
+            currentRepoUrl: savedUrl,
+            fromCache: savedFromCache
+          });
+        }
+      } catch (error) {
+        console.error('Error loading from localStorage:', error);
+      }
+    }
+  },
+
+  clearLocalStorage: () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('agentData');
+      localStorage.removeItem('currentRepoUrl');
+      localStorage.removeItem('fromCache');
+      localStorage.removeItem('lastAnalysis');
+    }
+  },
+  
+  reset: () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('agentData');
+      localStorage.removeItem('currentRepoUrl');
+      localStorage.removeItem('fromCache');
+      localStorage.removeItem('lastAnalysis');
+    }
     set({
       agentData: null,
+      currentRepoUrl: null,
       testCases: [],
       testResults: new Map(),
       analysisSteps: [],
+      fromCache: false,
       isLoading: false,
       loadingMessage: '',
       statusMessages: [],
@@ -120,5 +175,6 @@ export const useStore = create<AppState>((set) => ({
       highlightedElements: new Set(),
       isTestingInProgress: false,
       currentTestIndex: -1,
-    }),
+    });
+  },
 }));

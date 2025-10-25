@@ -44,6 +44,7 @@ export const apiService = {
       total_steps: number;
     };
     data?: AgentData;
+    from_cache?: boolean;
   }> => {
     const response = await api.get(`/api/analysis-status/${analysisId}`);
     return response.data;
@@ -84,6 +85,24 @@ export const apiService = {
       agent_id: agentId,
       updates,
     });
+    return response.data;
+  },
+
+  // Cache management
+  listCachedRepos: async () => {
+    const response = await api.get('/api/cache/list');
+    return response.data.cached_repos;
+  },
+
+  invalidateCache: async (githubUrl: string) => {
+    const response = await api.post('/api/cache/invalidate', {
+      github_url: githubUrl,
+    });
+    return response.data;
+  },
+
+  clearAllCache: async () => {
+    const response = await api.post('/api/cache/clear');
     return response.data;
   },
 };
