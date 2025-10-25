@@ -117,10 +117,11 @@ export const apiService = {
   },
 
   // Testing workflow APIs
-  startTestingSession: async (agentData: AgentData, repoUrl?: string): Promise<{ session_id: string; from_cache?: boolean }> => {
+  startTestingSession: async (agentData: AgentData, repoUrl?: string, analysisId?: string): Promise<{ session_id: string; from_cache?: boolean }> => {
     const response = await api.post('/api/testing/start', {
       agent_data: agentData,
       repo_url: repoUrl || '',
+      analysis_id: analysisId,
     });
     return response.data;
   },

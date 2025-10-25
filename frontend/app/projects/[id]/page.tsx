@@ -34,6 +34,7 @@ export default function ProjectDetailPage() {
     currentRepoUrl,
     fromCache,
     reset,
+    setCurrentAnalysisId,
   } = useStore();
 
   // Load project data
@@ -141,6 +142,7 @@ export default function ProjectDetailPage() {
         if (statusData.status === 'success' && statusData.data) {
           clearInterval(pollInterval);
           setAgentData(statusData.data, repoUrl, statusData.from_cache);
+          setCurrentAnalysisId(analysisId); // Save analysis ID to store
           
           const cacheMsg = statusData.from_cache ? ' (from cache)' : '';
           addStatusMessage({
@@ -227,6 +229,7 @@ export default function ProjectDetailPage() {
           if (statusData.status === 'success' && statusData.data) {
             clearInterval(pollInterval);
             setAgentData(statusData.data, project.repoUrl, statusData.from_cache);
+            setCurrentAnalysisId(analysisId); // Save analysis ID to store
             
             const cacheMsg = statusData.from_cache ? ' (from cache)' : '';
             addStatusMessage({
