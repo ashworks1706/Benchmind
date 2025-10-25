@@ -1,7 +1,3 @@
-"""
-Dynamic Testing Framework Generator for AI Agents
-Generates custom testing frameworks adapted to specific codebases
-"""
 
 import json
 from typing import Dict, List, Any
