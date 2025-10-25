@@ -2,6 +2,9 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
 import os
+import uuid
+import time
+from threading import Thread
 
 from services.github_scraper import GitHubScraper
 from services.agent_parser import AgentParser
@@ -19,6 +22,84 @@ agent_parser = AgentParser()
 test_generator = TestGenerator()
 code_editor = CodeEditor()
 
+# Store analysis progress in memory (in production, use Redis or similar)
+analysis_progress = {}
+
+def run_analysis_async(analysis_id, github_url):
+    """Run analysis in background thread and update progress"""
+    try:
+        # Step 1: Fetching repository
+        analysis_progress[analysis_id] = {
+            'step': 1,
+            'name': 'Fetching repository',
+            'status': 'in_progress',
+            'message': 'Connecting to GitHub...',
+            'total_steps': 5
+        }
+        time.sleep(0.5)  # Small delay for UI
+        
+        repo_data = github_scraper.scrape_repository(github_url)
+        
+        # Step 2: Scanning files
+        analysis_progress[analysis_id] = {
+            'step': 2,
+            'name': 'Scanning files',
+            'status': 'in_progress',
+            'message': f'Found {len(repo_data["files"])} files, analyzing...',
+            'total_steps': 5
+        }
+        time.sleep(0.5)
+        
+        # Step 3: Identifying agents
+        analysis_progress[analysis_id] = {
+            'step': 3,
+            'name': 'Identifying agents',
+            'status': 'in_progress',
+            'message': 'Analyzing code structure with AI...',
+            'total_steps': 5
+        }
+        
+        agent_data = agent_parser.parse_agents(repo_data)
+        
+        # Step 4: Extracting tools
+        analysis_progress[analysis_id] = {
+            'step': 4,
+            'name': 'Extracting tools',
+            'status': 'in_progress',
+            'message': f'Found {len(agent_data["tools"])} tools...',
+            'total_steps': 5
+        }
+        time.sleep(0.5)
+        
+        # Step 5: Mapping relationships
+        analysis_progress[analysis_id] = {
+            'step': 5,
+            'name': 'Mapping relationships',
+            'status': 'in_progress',
+            'message': 'Building relationship graph...',
+            'total_steps': 5
+        }
+        time.sleep(0.5)
+        
+        # Complete
+        analysis_progress[analysis_id] = {
+            'step': 5,
+            'name': 'Complete',
+            'status': 'completed',
+            'message': f'Analysis complete! Found {len(agent_data["agents"])} agents, {len(agent_data["tools"])} tools, {len(agent_data["relationships"])} relationships',
+            'total_steps': 5,
+            'data': agent_data
+        }
+        
+    except Exception as e:
+        analysis_progress[analysis_id] = {
+            'step': 0,
+            'name': 'Error',
+            'status': 'error',
+            'message': str(e),
+            'total_steps': 5
+        }
+
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
@@ -27,8 +108,8 @@ def health_check():
 @app.route('/api/analyze-repo', methods=['POST'])
 def analyze_repository():
     """
-    Analyze a GitHub repository to extract agent information
-    Expected payload: { "github_url": "https://github.com/user/repo" }
+    Start analysis of a GitHub repository (non-blocking)
+    Returns an analysis_id to track progress
     """
     try:
         data = request.json
@@ -37,19 +118,65 @@ def analyze_repository():
         if not github_url:
             return jsonify({'error': 'GitHub URL is required'}), 400
         
-        # Step 1: Scrape repository
-        repo_data = github_scraper.scrape_repository(github_url)
+        # Generate unique analysis ID
+        analysis_id = str(uuid.uuid4())
         
-        # Step 2: Parse agents and their configurations
-        agent_data = agent_parser.parse_agents(repo_data)
+        # Initialize progress
+        analysis_progress[analysis_id] = {
+            'step': 0,
+            'name': 'Starting',
+            'status': 'pending',
+            'message': 'Initializing analysis...',
+            'total_steps': 5
+        }
+        
+        # Start analysis in background thread
+        thread = Thread(target=run_analysis_async, args=(analysis_id, github_url))
+        thread.daemon = True
+        thread.start()
         
         return jsonify({
-            'status': 'success',
-            'data': agent_data
+            'status': 'started',
+            'analysis_id': analysis_id
         }), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/analysis-status/<analysis_id>', methods=['GET'])
+def get_analysis_status(analysis_id):
+    """
+    Get current status of an analysis
+    """
+    if analysis_id not in analysis_progress:
+        return jsonify({'error': 'Analysis not found'}), 404
+    
+    progress = analysis_progress[analysis_id]
+    
+    # If completed, include the data
+    if progress['status'] == 'completed' and 'data' in progress:
+        return jsonify({
+            'status': 'success',
+            'progress': {
+                'step': progress['step'],
+                'name': progress['name'],
+                'status': progress['status'],
+                'message': progress['message'],
+                'total_steps': progress['total_steps']
+            },
+            'data': progress['data']
+        }), 200
+    
+    return jsonify({
+        'status': 'in_progress' if progress['status'] == 'in_progress' else progress['status'],
+        'progress': {
+            'step': progress['step'],
+            'name': progress['name'],
+            'status': progress['status'],
+            'message': progress['message'],
+            'total_steps': progress['total_steps']
+        }
+    }), 200
 
 @app.route('/api/generate-tests', methods=['POST'])
 def generate_tests():

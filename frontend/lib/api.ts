@@ -25,6 +25,30 @@ export const apiService = {
     return response.data.data;
   },
 
+  // Start repository analysis (non-blocking, returns analysis_id)
+  startAnalysis: async (githubUrl: string): Promise<string> => {
+    const response = await api.post('/api/analyze-repo', {
+      github_url: githubUrl,
+    });
+    return response.data.analysis_id;
+  },
+
+  // Get analysis status by ID
+  getAnalysisStatus: async (analysisId: string): Promise<{
+    status: 'in_progress' | 'completed' | 'error';
+    progress: {
+      step: number;
+      name: string;
+      status: string;
+      message: string;
+      total_steps: number;
+    };
+    data?: AgentData;
+  }> => {
+    const response = await api.get(`/api/analysis-status/${analysisId}`);
+    return response.data;
+  },
+
   // Generate test cases
   generateTests: async (agentData: AgentData): Promise<TestCase[]> => {
     const response = await api.post('/api/generate-tests', {

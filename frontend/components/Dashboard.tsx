@@ -10,7 +10,16 @@ import { Loader2 } from 'lucide-react';
 
 export function Dashboard() {
   const [githubUrl, setGithubUrl] = useState('');
-  const { agentData, isLoading, setAgentData, setLoading, addStatusMessage, panelView } = useStore();
+  const { 
+    agentData, 
+    isLoading, 
+    setAgentData, 
+    setLoading, 
+    addStatusMessage, 
+    panelView,
+    setAnalysisSteps,
+    selectedElement,
+  } = useStore();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,25 +33,94 @@ export function Dashboard() {
     }
 
     try {
-      setLoading(true, 'Analyzing repository...');
+      setLoading(true, '🚀 Starting analysis...');
+      setAnalysisSteps([]);
+      
       addStatusMessage({
         type: 'info',
-        message: `Starting analysis of ${githubUrl}`,
+        message: `🚀 Starting analysis of ${githubUrl}`,
       });
 
-      const data = await apiService.analyzeRepository(githubUrl);
+      // Start the analysis (non-blocking)
+      const analysisId = await apiService.startAnalysis(githubUrl);
       
-      setAgentData(data);
-      addStatusMessage({
-        type: 'success',
-        message: `Successfully analyzed repository. Found ${data.agents.length} agents and ${data.tools.length} tools.`,
-      });
+      // Poll for progress updates
+      const pollInterval = setInterval(async () => {
+        try {
+          const statusData = await apiService.getAnalysisStatus(analysisId);
+          
+          const stepEmojis: { [key: string]: string } = {
+            'Starting': '⚡',
+            'Fetching repository': '📦',
+            'Scanning files': '🔍',
+            'Identifying agents': '🤖',
+            'Extracting tools': '🔧',
+            'Mapping relationships': '🔗',
+            'Complete': '🎉',
+          };
+          
+          const emoji = stepEmojis[statusData.progress.name] || '⚡';
+          
+          // Update loading message
+          setLoading(true, `${emoji} ${statusData.progress.name}...`);
+          
+          // Update steps array (use functional update)
+          setAnalysisSteps((prev: any[]) => {
+            const existingIndex = prev.findIndex((s: any) => s.step === statusData.progress.step);
+            if (existingIndex >= 0) {
+              // Update existing step
+              const newSteps = [...prev];
+              newSteps[existingIndex] = statusData.progress;
+              return newSteps;
+            } else {
+              // Add new step
+              return [...prev, statusData.progress];
+            }
+          });
+          
+          // Add status message for step changes
+          if (statusData.progress.status === 'in_progress') {
+            addStatusMessage({
+              type: 'progress',
+              message: `${emoji} ${statusData.progress.message}`,
+            });
+          }
+          
+          // Check if completed
+          if (statusData.status === 'completed' && statusData.data) {
+            clearInterval(pollInterval);
+            
+            setAgentData(statusData.data);
+            addStatusMessage({
+              type: 'success',
+              message: `🎉 Analysis complete! Found ${statusData.data.agents.length} agents, ${statusData.data.tools.length} tools, and ${statusData.data.relationships.length} relationships.`,
+            });
+            
+            setLoading(false);
+          } else if (statusData.status === 'error') {
+            clearInterval(pollInterval);
+            
+            addStatusMessage({
+              type: 'error',
+              message: `❌ Analysis failed: ${statusData.progress.message}`,
+            });
+            
+            setLoading(false);
+          }
+        } catch (pollError: any) {
+          clearInterval(pollInterval);
+          addStatusMessage({
+            type: 'error',
+            message: `❌ Error checking status: ${pollError.message}`,
+          });
+          setLoading(false);
+        }
+      }, 500); // Poll every 500ms
       
-      setLoading(false);
     } catch (error: any) {
       addStatusMessage({
         type: 'error',
-        message: `Failed to analyze repository: ${error.message}`,
+        message: `❌ Failed to start analysis: ${error.message}`,
       });
       setLoading(false);
     }
@@ -51,7 +129,7 @@ export function Dashboard() {
   return (
     <div className="h-screen pt-16 flex">
       {/* Main Canvas Area - 3:4 ratio */}
-      <div className="flex-[3] relative bg-muted/30">
+      <div className="flex-3 relative bg-muted/30">
         {!agentData && !isLoading ? (
           <div className="flex items-center justify-center h-full">
             <div className="max-w-md w-full px-8">
@@ -93,22 +171,20 @@ export function Dashboard() {
         ) : (
           <Canvas />
         )}
-      </div>
-
-      {/* Right Panel - 1:4 ratio */}
-      <div className="flex-1 border-l border-border bg-background overflow-hidden flex flex-col">
-        {panelView === 'both' && (
-          <>
-            <div className="flex-1 overflow-hidden">
+        
+        {/* Details Panel Overlay - appears on top of canvas when item is selected */}
+        {selectedElement && (
+          <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-50 p-8">
+            <div className="bg-background rounded-lg shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col">
               <DetailsPanel />
             </div>
-            <div className="flex-1 border-t border-border overflow-hidden">
-              <StatusPanel />
-            </div>
-          </>
+          </div>
         )}
-        {panelView === 'status' && <StatusPanel />}
-        {panelView === 'details' && <DetailsPanel />}
+      </div>
+
+      {/* Right Panel - Status Only */}
+      <div className="flex-1 border-l border-border bg-background overflow-hidden">
+        <StatusPanel />
       </div>
     </div>
   );

@@ -13,6 +13,7 @@ interface AppState {
   agentData: AgentData | null;
   testCases: TestCase[];
   testResults: Map<string, TestResult>;
+  analysisSteps: any[];
   
   // UI State
   isLoading: boolean;
@@ -37,6 +38,7 @@ interface AppState {
   startTesting: () => void;
   stopTesting: () => void;
   setCurrentTestIndex: (index: number) => void;
+  setAnalysisSteps: (steps: any[] | ((prev: any[]) => any[])) => void;
   reset: () => void;
 }
 
@@ -45,6 +47,7 @@ export const useStore = create<AppState>((set) => ({
   agentData: null,
   testCases: [],
   testResults: new Map(),
+  analysisSteps: [],
   isLoading: false,
   loadingMessage: '',
   statusMessages: [],
@@ -98,11 +101,17 @@ export const useStore = create<AppState>((set) => ({
   
   setCurrentTestIndex: (index) => set({ currentTestIndex: index }),
   
+  setAnalysisSteps: (steps) => 
+    set((state) => ({
+      analysisSteps: typeof steps === 'function' ? steps(state.analysisSteps) : steps
+    })),
+  
   reset: () =>
     set({
       agentData: null,
       testCases: [],
       testResults: new Map(),
+      analysisSteps: [],
       isLoading: false,
       loadingMessage: '',
       statusMessages: [],
