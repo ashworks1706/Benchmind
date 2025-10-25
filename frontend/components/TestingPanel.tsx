@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 
 export default function TestingPanel() {
+  export default function TestingPanel() {
   const {
     agentData,
     testingSessionId,
@@ -30,12 +31,14 @@ export default function TestingPanel() {
     setTestingStatus,
     addTestingProgress,
     clearTestingProgress,
-    setPendingTestCases,
     setTestReport,
+    setPendingTestCases,
     addStatusMessage,
+    setPanelView,
     highlightElements,
     clearHighlights,
-    setPanelView,
+    highlightErrorElements,
+    clearErrorHighlights,
   } = useStore();
 
   const [isPolling, setIsPolling] = useState(false);
@@ -128,9 +131,37 @@ export default function TestingPanel() {
         setIsPolling(false);
         
         if (data.status === 'completed') {
+          // Clear all highlights when testing completes
+          clearHighlights();
+          
           // Fetch final report
           const reportData = await apiService.getTestReport(testingSessionId);
           setTestReport(reportData.report);
+          
+          // Highlight failed/warning tests in canvas for visualization
+          if (reportData.report) {
+            const failedTestIds: string[] = [];
+            
+            // Collect highlight elements from failed/warning tests
+            if (reportData.report.test_results) {
+              reportData.report.test_results.forEach((result: any) => {
+                if (result.status === 'failed' || result.status === 'warning') {
+                  // Find the corresponding test case to get highlight_elements
+                  const testCase = data.test_cases?.find((tc: any) => tc.id === result.test_id);
+                  if (testCase?.highlight_elements) {
+                    failedTestIds.push(...testCase.highlight_elements);
+                  }
+                }
+              });
+            }
+            
+            // Highlight failed/warning elements with error styling
+            if (failedTestIds.length > 0) {
+              setTimeout(() => {
+                highlightErrorElements(failedTestIds);
+              }, 500); // Small delay after clearing
+            }
+          }
         }
       }
     } catch (error: any) {

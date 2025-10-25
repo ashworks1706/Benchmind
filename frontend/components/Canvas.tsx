@@ -23,7 +23,7 @@ interface CanvasEdge {
 }
 
 export function Canvas() {
-  const { agentData, isLoading, loadingMessage, highlightedElements, setSelectedElement, setPanelView } = useStore();
+  const { agentData, isLoading, loadingMessage, highlightedElements, errorHighlightedElements, setSelectedElement, setPanelView } = useStore();
   const canvasRef = useRef<HTMLDivElement>(null);
   const [nodes, setNodes] = useState<CanvasNode[]>([]);
   const [edges, setEdges] = useState<CanvasEdge[]>([]);
@@ -352,6 +352,7 @@ export function Canvas() {
             
             // Check if this edge should be highlighted
             const isEdgeHighlighted = edge.data && highlightedElements.has(edge.data.id);
+            const isEdgeErrorHighlighted = edge.data && errorHighlightedElements.has(edge.data.id);
 
             let path: string;
 
@@ -372,6 +373,17 @@ export function Canvas() {
               
               path = `M ${fromX} ${fromY} Q ${midX} ${midY}, ${toX} ${toY}`;
             }
+            
+            // Determine stroke color based on highlight state
+            let strokeColor = color;
+            let strokeWidth2 = strokeWidth;
+            if (isEdgeErrorHighlighted) {
+              strokeColor = '#ef4444'; // Red for errors
+              strokeWidth2 = strokeWidth + 3;
+            } else if (isEdgeHighlighted) {
+              strokeColor = '#fbbf24'; // Yellow for normal highlights
+              strokeWidth2 = strokeWidth + 2;
+            }
 
             return (
               <g key={edge.id} className="edge-group">
@@ -390,15 +402,17 @@ export function Canvas() {
                 {/* Visible path with highlight animation */}
                 <path
                   d={path}
-                  stroke={isEdgeHighlighted ? '#fbbf24' : color}
-                  strokeWidth={isEdgeHighlighted ? strokeWidth + 2 : strokeWidth}
+                  stroke={strokeColor}
+                  strokeWidth={strokeWidth2}
                   fill="none"
                   markerEnd={`url(#${markerId})`}
                   className={`cursor-pointer pointer-events-none transition-all edge-path ${
-                    isEdgeHighlighted ? 'animate-pulse' : ''
+                    (isEdgeHighlighted || isEdgeErrorHighlighted) ? 'animate-pulse' : ''
                   }`}
                   style={{
-                    filter: isEdgeHighlighted 
+                    filter: isEdgeErrorHighlighted
+                      ? 'drop-shadow(0 0 12px rgba(239, 68, 68, 0.9))'
+                      : isEdgeHighlighted 
                       ? 'drop-shadow(0 0 10px rgba(251, 191, 36, 0.8))'
                       : 'drop-shadow(0 0 3px rgba(0,0,0,0.2))',
                   }}
@@ -435,21 +449,39 @@ export function Canvas() {
         {/* Draw nodes */}
         {nodes.map((node) => {
           const isHighlighted = highlightedElements.has(node.data.id);
+          const isErrorHighlighted = errorHighlightedElements.has(node.data.id);
           const isAgent = node.type === 'agent';
+          
+          // Determine styling based on highlight state
+          let borderClass = '';
+          let bgClass = '';
+          let effectClass = '';
+          
+          if (isErrorHighlighted) {
+            borderClass = 'border-red-500';
+            bgClass = 'bg-red-50 dark:bg-red-900/20';
+            effectClass = 'shadow-xl scale-110 ring-4 ring-red-500/50 animate-pulse';
+          } else if (isHighlighted) {
+            borderClass = 'border-yellow-400';
+            bgClass = 'bg-yellow-50 dark:bg-yellow-900/20';
+            effectClass = 'shadow-xl scale-110 ring-4 ring-yellow-400/50 animate-pulse';
+          } else if (isAgent) {
+            borderClass = 'border-blue-500/60 hover:border-blue-500';
+            bgClass = 'bg-linear-to-br from-blue-50 to-indigo-50 dark:from-blue-950/50 dark:to-indigo-950/50';
+            effectClass = 'hover:scale-105';
+          } else {
+            borderClass = 'border-green-500/60 hover:border-green-500';
+            bgClass = 'bg-linear-to-br from-green-50 to-emerald-50 dark:from-green-950/50 dark:to-emerald-950/50';
+            effectClass = 'hover:scale-105';
+          }
 
           return (
             <div
               key={node.id}
               className={`absolute cursor-move transition-all duration-300 ${
                 isAgent
-                  ? 'group px-5 py-4 rounded-xl border-2 shadow-lg hover:shadow-2xl ' +
-                    (isHighlighted
-                      ? 'border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 shadow-xl scale-110 ring-4 ring-yellow-400/50 animate-pulse'
-                      : 'border-blue-500/60 bg-linear-to-br from-blue-50 to-indigo-50 dark:from-blue-950/50 dark:to-indigo-950/50 hover:border-blue-500 hover:scale-105')
-                  : 'group px-3 py-2.5 rounded-lg border-2 shadow-md hover:shadow-lg ' +
-                    (isHighlighted
-                      ? 'border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 shadow-xl scale-110 ring-4 ring-yellow-400/50 animate-pulse'
-                      : 'border-green-500/60 bg-linear-to-br from-green-50 to-emerald-50 dark:from-green-950/50 dark:to-emerald-950/50 hover:border-green-500 hover:scale-105')
+                  ? `group px-5 py-4 rounded-xl border-2 shadow-lg hover:shadow-2xl ${borderClass} ${bgClass} ${effectClass}`
+                  : `group px-3 py-2.5 rounded-lg border-2 shadow-md hover:shadow-lg ${borderClass} ${bgClass} ${effectClass}`
               }`}
               style={{
                 left: node.x,

@@ -134,6 +134,109 @@ export default function TestReportPanel() {
             </div>
           </div>
 
+          {/* Detailed Test Results */}
+          {testReport.test_results && testReport.test_results.length > 0 && (
+            <div className="p-4 rounded-lg border border-border bg-card">
+              <h4 className="font-semibold mb-4 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4" />
+                Detailed Test Results ({testReport.test_results.length})
+              </h4>
+              <div className="space-y-3">
+                {testReport.test_results.map((result: any, idx: number) => {
+                  const statusColor = result.status === 'passed' 
+                    ? 'border-green-500/30 bg-green-500/5' 
+                    : result.status === 'warning'
+                    ? 'border-yellow-500/30 bg-yellow-500/5'
+                    : 'border-red-500/30 bg-red-500/5';
+                  
+                  const StatusIcon = result.status === 'passed' 
+                    ? CheckCircle2 
+                    : result.status === 'warning'
+                    ? AlertTriangle
+                    : XCircle;
+
+                  return (
+                    <details key={idx} className={`p-3 rounded-lg border ${statusColor}`}>
+                      <summary className="cursor-pointer font-medium text-sm flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <StatusIcon className="w-4 h-4" />
+                          <span>{result.results?.summary || result.test_id}</span>
+                        </div>
+                        <span className="text-xs px-2 py-1 rounded bg-background/50 uppercase font-semibold">
+                          {result.status}
+                        </span>
+                      </summary>
+                      <div className="mt-3 space-y-2 text-xs">
+                        {result.results?.details && (
+                          <div>
+                            <p className="font-medium text-muted-foreground mb-1">Details:</p>
+                            <p className="text-foreground">{result.results.details}</p>
+                          </div>
+                        )}
+                        
+                        {result.results?.logs && result.results.logs.length > 0 && (
+                          <div>
+                            <p className="font-medium text-muted-foreground mb-1">Execution Logs:</p>
+                            <div className="bg-background/50 rounded p-2 font-mono space-y-1">
+                              {result.results.logs.map((log: string, logIdx: number) => (
+                                <div key={logIdx} className="text-muted-foreground">
+                                  {log}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {result.metrics && result.metrics.length > 0 && (
+                          <div>
+                            <p className="font-medium text-muted-foreground mb-1">Metrics:</p>
+                            <div className="space-y-1">
+                              {result.metrics.map((metric: any, mIdx: number) => (
+                                <div key={mIdx} className="flex items-center justify-between p-2 bg-background/30 rounded">
+                                  <span className="font-medium">{metric.name}</span>
+                                  <div className="flex items-center gap-2">
+                                    <span className={metric.passed ? 'text-green-600' : 'text-orange-600'}>
+                                      {metric.value}{metric.unit}
+                                    </span>
+                                    <span className="text-muted-foreground">
+                                      (target: {metric.benchmark}{metric.unit})
+                                    </span>
+                                    {metric.passed ? (
+                                      <CheckCircle2 className="w-3 h-3 text-green-600" />
+                                    ) : (
+                                      <XCircle className="w-3 h-3 text-orange-600" />
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {result.results?.issues_found && result.results.issues_found.length > 0 && (
+                          <div>
+                            <p className="font-medium text-muted-foreground mb-1">Issues Found:</p>
+                            <ul className="list-disc list-inside space-y-1 text-foreground">
+                              {result.results.issues_found.map((issue: string, issueIdx: number) => (
+                                <li key={issueIdx}>{issue}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        
+                        {result.execution_time && (
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            ⏱️ Execution Time: {result.execution_time}s
+                          </div>
+                        )}
+                      </div>
+                    </details>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Test Distribution Chart */}
           {testReport.charts_data?.test_distribution && (
             <div className="p-4 rounded-lg border border-border bg-card">

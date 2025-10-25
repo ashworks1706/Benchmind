@@ -32,6 +32,7 @@ interface AppState {
   selectedElement: SelectedElement;
   panelView: PanelView;
   highlightedElements: Set<string>;
+  errorHighlightedElements: Set<string>; // For failed/warning tests
   isTestingInProgress: boolean;
   currentTestIndex: number;
   
@@ -46,6 +47,8 @@ interface AppState {
   setPanelView: (view: PanelView) => void;
   highlightElements: (elementIds: string[]) => void;
   clearHighlights: () => void;
+  highlightErrorElements: (elementIds: string[]) => void;
+  clearErrorHighlights: () => void;
   startTesting: () => void;
   stopTesting: () => void;
   setCurrentTestIndex: (index: number) => void;
@@ -87,6 +90,7 @@ export const useStore = create<AppState>((set) => ({
   selectedElement: null,
   panelView: 'status',
   highlightedElements: new Set(),
+  errorHighlightedElements: new Set(),
   isTestingInProgress: false,
   currentTestIndex: -1,
 
@@ -147,6 +151,11 @@ export const useStore = create<AppState>((set) => ({
     set({ highlightedElements: new Set(elementIds) }),
   
   clearHighlights: () => set({ highlightedElements: new Set() }),
+  
+  highlightErrorElements: (elementIds) =>
+    set({ errorHighlightedElements: new Set(elementIds) }),
+  
+  clearErrorHighlights: () => set({ errorHighlightedElements: new Set() }),
   
   startTesting: () =>
     set({ isTestingInProgress: true, currentTestIndex: 0 }),
