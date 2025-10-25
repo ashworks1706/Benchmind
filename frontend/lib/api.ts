@@ -46,6 +46,7 @@ export const apiService = {
     };
     data?: AgentData;
     from_cache?: boolean;
+    test_cases?: TestCase[];
   }> => {
     const response = await api.get(`/api/analysis-status/${analysisId}`);
     return response.data;

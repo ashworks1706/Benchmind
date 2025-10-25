@@ -40,6 +40,7 @@ import {
     clearHighlights,
     highlightErrorElements,
     clearErrorHighlights,
+    setGeneratingTests,
   } = useStore();
 
   const [isPolling, setIsPolling] = useState(false);
@@ -66,6 +67,7 @@ import {
       
       if (response.from_cache) {
         setTestingStatus('ready_for_confirmation');
+        setGeneratingTests(false); // Not generating, loaded from cache
         addStatusMessage({
           type: 'success',
           message: '⚡ Test cases loaded from database! Ready to run.',
@@ -73,6 +75,7 @@ import {
         setIsPolling(true); // Still poll to get the cached test cases
       } else {
         setTestingStatus('generating');
+        setGeneratingTests(true); // Start showing skeleton loading
         setIsPolling(true);
         addStatusMessage({
           type: 'success',
@@ -143,11 +146,13 @@ import {
       // Store final test cases when ready
       if (data.test_cases && data.test_cases.length > 0 && data.status === 'ready_for_confirmation') {
         setPendingTestCases(data.test_cases);
+        setGeneratingTests(false); // Stop showing skeleton loading
       }
 
       // Stop polling when ready for confirmation or completed
       if (data.status === 'ready_for_confirmation' || data.status === 'completed') {
         setIsPolling(false);
+        setGeneratingTests(false); // Ensure skeleton loading is off
         
         if (data.status === 'completed') {
           // Clear all highlights when testing completes

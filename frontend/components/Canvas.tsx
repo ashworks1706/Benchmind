@@ -24,7 +24,7 @@ interface CanvasEdge {
 }
 
 export function Canvas() {
-  const { agentData, isLoading, loadingMessage, highlightedElements, errorHighlightedElements, warningHighlightedElements, setSelectedElement, setPanelView, testCases, pendingTestCases, testResults, currentTestIndex, isTestingInProgress } = useStore();
+  const { agentData, isLoading, loadingMessage, isGeneratingTests, highlightedElements, errorHighlightedElements, warningHighlightedElements, setSelectedElement, setPanelView, testCases, pendingTestCases, testResults, currentTestIndex, isTestingInProgress } = useStore();
   const canvasRef = useRef<HTMLDivElement>(null);
   const [nodes, setNodes] = useState<CanvasNode[]>([]);
   const [edges, setEdges] = useState<CanvasEdge[]>([]);
@@ -137,7 +137,54 @@ export function Canvas() {
 
   // Add test nodes when test cases are available with alternating pattern
   useEffect(() => {
-    if (!activeTestCases || activeTestCases.length === 0 || !agentData) return;
+    if (!agentData) return;
+    
+    // If generating tests, show skeleton nodes
+    if (isGeneratingTests) {
+      setNodes(prevNodes => {
+        // Remove old test nodes
+        const nonTestNodes = prevNodes.filter(n => n.type !== 'test');
+        
+        // Calculate the rightmost position from existing nodes
+        const maxX = nonTestNodes.reduce((max, node) => Math.max(max, node.x + node.width), 0);
+        
+        // Create 6 skeleton test nodes in alternating pattern
+        const skeletonNodes: CanvasNode[] = [];
+        const testStartX = maxX + 300;
+        const horizontalSpacing = 250;
+        const verticalSpacing = 180;
+        
+        for (let idx = 0; idx < 6; idx++) {
+          const isTopRow = idx % 2 === 0;
+          const col = Math.floor(idx / 2);
+          
+          skeletonNodes.push({
+            id: `skeleton-${idx}`,
+            type: 'test',
+            x: testStartX + (col * horizontalSpacing * 2) + (isTopRow ? 0 : horizontalSpacing),
+            y: isTopRow ? 100 : 100 + verticalSpacing,
+            width: 180,
+            height: 100,
+            data: {
+              id: `skeleton-${idx}`,
+              name: 'Loading...',
+              category: 'tool_calling',
+              description: 'Generating test case...',
+              target: { type: 'agent', id: '', name: '' },
+              highlight_elements: [],
+              test_input: 'Generating...',
+              expected_behavior: 'Loading...',
+              success_criteria: 'Loading...'
+            } as TestCase,
+          });
+        }
+        
+        return [...nonTestNodes, ...skeletonNodes];
+      });
+      return;
+    }
+    
+    if (!activeTestCases || activeTestCases.length === 0) return;
 
     setNodes(prevNodes => {
       // Remove old test nodes
@@ -798,6 +845,8 @@ function ToolNode({ data }: { data: Tool }) {
 
 // Test Node Component  
 function TestNode({ data, result, isRunning }: { data: TestCase; result: any; isRunning: boolean }) {
+  const isSkeleton = data.name === 'Loading...';
+  
   const getCategoryIcon = (category: string) => {
     const icons: { [key: string]: string } = {
       'tool_calling': '🔧',
@@ -827,6 +876,27 @@ function TestNode({ data, result, isRunning }: { data: TestCase; result: any; is
 
   // Check if there are recommendations
   const hasRecommendations = result?.recommendations && result.recommendations.length > 0;
+
+  // Skeleton loading state
+  if (isSkeleton) {
+    return (
+      <div className="flex flex-col gap-2 relative animate-pulse">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
+            <div className="w-4 h-4 bg-purple-500/40 rounded" />
+          </div>
+          <div className="flex-1 min-w-0 space-y-2">
+            <div className="h-3 bg-purple-500/30 rounded w-3/4" />
+            <div className="h-2 bg-purple-500/20 rounded w-1/2" />
+          </div>
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="h-2 bg-purple-500/20 rounded flex-1 mr-2" />
+          <div className="w-4 h-4 bg-purple-500/20 rounded" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-2 relative">

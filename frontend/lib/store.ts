@@ -28,6 +28,7 @@ interface AppState {
   // UI State
   isLoading: boolean;
   loadingMessage: string;
+  isGeneratingTests: boolean; // New state for test generation loading
   statusMessages: StatusMessage[];
   selectedElement: SelectedElement;
   panelView: PanelView;
@@ -52,6 +53,7 @@ interface AppState {
   setTestCases: (cases: TestCase[]) => void;
   addTestResult: (result: TestResult) => void;
   setLoading: (loading: boolean, message?: string) => void;
+  setGeneratingTests: (generating: boolean) => void;
   addStatusMessage: (message: Omit<StatusMessage, 'id' | 'timestamp'>) => void;
   setSelectedElement: (element: SelectedElement) => void;
   setPanelView: (view: PanelView) => void;
@@ -103,6 +105,7 @@ export const useStore = create<AppState>((set) => ({
   
   isLoading: false,
   loadingMessage: '',
+  isGeneratingTests: false,
   statusMessages: [],
   selectedElement: null,
   panelView: 'status',
@@ -151,6 +154,9 @@ export const useStore = create<AppState>((set) => ({
   
   setLoading: (loading, message = '') =>
     set({ isLoading: loading, loadingMessage: message }),
+  
+  setGeneratingTests: (generating) =>
+    set({ isGeneratingTests: generating }),
   
   addStatusMessage: (message) =>
     set((state) => ({

@@ -35,6 +35,7 @@ export default function ProjectDetailPage() {
     fromCache,
     reset,
     setCurrentAnalysisId,
+    setTestCases,
   } = useStore();
 
   // Load project data
@@ -144,6 +145,15 @@ export default function ProjectDetailPage() {
           setAgentData(statusData.data, repoUrl, statusData.from_cache);
           setCurrentAnalysisId(analysisId); // Save analysis ID to store
           
+          // Load test cases if they exist
+          if (statusData.test_cases && statusData.test_cases.length > 0) {
+            setTestCases(statusData.test_cases);
+            addStatusMessage({
+              type: 'success',
+              message: `📋 Loaded ${statusData.test_cases.length} existing test cases`,
+            });
+          }
+          
           const cacheMsg = statusData.from_cache ? ' (from cache)' : '';
           addStatusMessage({
             type: 'success',
@@ -230,6 +240,15 @@ export default function ProjectDetailPage() {
             clearInterval(pollInterval);
             setAgentData(statusData.data, project.repoUrl, statusData.from_cache);
             setCurrentAnalysisId(analysisId); // Save analysis ID to store
+            
+            // Load test cases if they exist
+            if (statusData.test_cases && statusData.test_cases.length > 0) {
+              setTestCases(statusData.test_cases);
+              addStatusMessage({
+                type: 'success',
+                message: `📋 Loaded ${statusData.test_cases.length} existing test cases`,
+              });
+            }
             
             const cacheMsg = statusData.from_cache ? ' (from cache)' : '';
             addStatusMessage({
