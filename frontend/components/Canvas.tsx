@@ -538,13 +538,46 @@ export function Canvas() {
           const isHighlighted = highlightedElements.has(node.data.id);
           const isErrorHighlighted = errorHighlightedElements.has(node.data.id);
           const isAgent = node.type === 'agent';
+          const isTest = node.type === 'test';
+          
+          // Check if this test node is currently running
+          const isRunningTest = isTest && isTestingInProgress && 
+            testCases[currentTestIndex]?.id === (node.data as TestCase).id;
+          
+          // Check if test has results
+          const testResult = isTest ? testResults.get((node.data as TestCase).id) : null;
           
           // Determine styling based on highlight state
           let borderClass = '';
           let bgClass = '';
           let effectClass = '';
           
-          if (isErrorHighlighted) {
+          if (isTest) {
+            // Test node styling
+            if (isRunningTest) {
+              borderClass = 'border-blue-500';
+              bgClass = 'bg-blue-50 dark:bg-blue-900/20';
+              effectClass = 'shadow-xl ring-4 ring-blue-500/50 animate-pulse';
+            } else if (testResult) {
+              if (testResult.status === 'passed') {
+                borderClass = 'border-green-500';
+                bgClass = 'bg-green-50 dark:bg-green-900/20';
+                effectClass = 'hover:scale-105';
+              } else if (testResult.status === 'failed') {
+                borderClass = 'border-red-500';
+                bgClass = 'bg-red-50 dark:bg-red-900/20';
+                effectClass = 'hover:scale-105';
+              } else if (testResult.status === 'warning') {
+                borderClass = 'border-amber-500';
+                bgClass = 'bg-amber-50 dark:bg-amber-900/20';
+                effectClass = 'hover:scale-105';
+              }
+            } else {
+              borderClass = 'border-purple-500/60 hover:border-purple-500';
+              bgClass = 'bg-linear-to-br from-purple-50 to-violet-50 dark:from-purple-950/50 dark:to-violet-950/50';
+              effectClass = 'hover:scale-105';
+            }
+          } else if (isErrorHighlighted) {
             borderClass = 'border-red-500';
             bgClass = 'bg-red-50 dark:bg-red-900/20';
             effectClass = 'shadow-xl scale-110 ring-4 ring-red-500/50 animate-pulse';
@@ -568,6 +601,8 @@ export function Canvas() {
               className={`absolute cursor-move transition-all duration-300 ${
                 isAgent
                   ? `group px-5 py-4 rounded-xl border-2 shadow-lg hover:shadow-2xl ${borderClass} ${bgClass} ${effectClass}`
+                  : isTest
+                  ? `group px-3 py-2.5 rounded-lg border-2 shadow-md hover:shadow-lg ${borderClass} ${bgClass} ${effectClass}`
                   : `group px-3 py-2.5 rounded-lg border-2 shadow-md hover:shadow-lg ${borderClass} ${bgClass} ${effectClass}`
               }`}
               style={{
@@ -586,6 +621,12 @@ export function Canvas() {
             >
               {isAgent ? (
                 <AgentNode data={node.data as Agent} />
+              ) : isTest ? (
+                <TestNode 
+                  data={node.data as TestCase} 
+                  result={testResult}
+                  isRunning={isRunningTest}
+                />
               ) : (
                 <ToolNode data={node.data as Tool} />
               )}
@@ -667,6 +708,69 @@ function ToolNode({ data }: { data: Tool }) {
       <span className="text-xs font-semibold text-green-700 dark:text-green-300 text-center line-clamp-2 leading-tight">
         {data.name}
       </span>
+    </div>
+  );
+}
+
+// Test Node Component  
+function TestNode({ data, result, isRunning }: { data: TestCase; result: any; isRunning: boolean }) {
+  const getCategoryIcon = (category: string) => {
+    const icons: { [key: string]: string } = {
+      'tool_calling': '🔧',
+      'reasoning': '🧠',
+      'performance': '⚡',
+      'collaborative': '🤝',
+      'relationship': '🔗',
+      'connection': '📡',
+      'security': '🔒',
+      'error_handling': '⚠️',
+      'output_quality': '✨',
+      'edge_case': '🎯',
+      'prompt_injection': '🛡️',
+      'hyperparameter': '⚙️',
+    };
+    return icons[category] || '📋';
+  };
+
+  const getStatusIcon = () => {
+    if (isRunning) return '▶️';
+    if (!result) return '⏸️';
+    if (result.status === 'passed') return '✅';
+    if (result.status === 'failed') return '❌';
+    if (result.status === 'warning') return '⚠️';
+    return '❓';
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
+          {getCategoryIcon(data.category)}
+        </div>
+        <div className="flex-1 min-w-0">
+          <h4 className="font-bold text-xs text-purple-700 dark:text-purple-300 leading-tight truncate">
+            {data.name}
+          </h4>
+          <span className="text-[10px] text-purple-600/70 dark:text-purple-400/70 font-medium">
+            {data.category}
+          </span>
+        </div>
+      </div>
+      
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] text-muted-foreground truncate flex-1">
+          Target: {data.target.name}
+        </span>
+        <span className="text-base ml-1">
+          {getStatusIcon()}
+        </span>
+      </div>
+      
+      {isRunning && (
+        <div className="w-full h-1 bg-blue-200 rounded-full overflow-hidden">
+          <div className="h-full bg-blue-500 animate-pulse" style={{ width: '60%' }} />
+        </div>
+      )}
     </div>
   );
 }
