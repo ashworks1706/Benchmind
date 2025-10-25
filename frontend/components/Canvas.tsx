@@ -1,151 +1,201 @@
 'use client';
 
-import { useCallback, useEffect } from 'react';
-import ReactFlow, {
-  Node,
-  Edge,
-  Controls,
-  Background,
-  useNodesState,
-  useEdgesState,
-  MarkerType,
-  NodeMouseHandler,
-  Position,
-  MiniMap,
-} from 'reactflow';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from '@/lib/store';
 import { Agent, Tool, Relationship } from '@/types';
 
+interface CanvasNode {
+  id: string;
+  type: 'agent' | 'tool';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  data: Agent | Tool;
+}
+
+interface CanvasEdge {
+  id: string;
+  type: 'agent-tool' | 'agent-agent';
+  from: CanvasNode;
+  to: CanvasNode;
+  data?: Relationship;
+}
+
 export function Canvas() {
   const { agentData, isLoading, loadingMessage, highlightedElements, setSelectedElement, setPanelView } = useStore();
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [nodes, setNodes] = useState<CanvasNode[]>([]);
+  const [edges, setEdges] = useState<CanvasEdge[]>([]);
+  const [transform, setTransform] = useState({ x: 0, y: 0, scale: 0.8 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [draggedNode, setDraggedNode] = useState<CanvasNode | null>(null);
+  const [nodeDragStart, setNodeDragStart] = useState({ x: 0, y: 0 });
 
   // Build graph from agent data
   useEffect(() => {
     if (!agentData) return;
 
-    const newNodes: Node[] = [];
-    const newEdges: Edge[] = [];
-    const agentSpacing = 800; // Increased horizontal spacing between agents
-    const toolOffsetY = 350; // Increased vertical offset for tools below agents
-    const toolSpacing = 200; // Increased horizontal spacing between tools
+    const newNodes: CanvasNode[] = [];
+    const nodeMap = new Map<string, CanvasNode>();
+    const agentSpacing = 800;
+    const toolOffsetY = 350;
+    const toolSpacing = 200;
 
-    // Create agent nodes in a horizontal row
+    // Create agent nodes
     agentData.agents.forEach((agent, idx) => {
-      newNodes.push({
+      const node: CanvasNode = {
         id: agent.id,
-        type: 'agentNode',
-        position: { x: idx * agentSpacing, y: 100 },
-        data: { 
-          ...agent,
-          isHighlighted: highlightedElements.has(agent.id)
-        },
-        sourcePosition: Position.Bottom,
-        targetPosition: Position.Top,
-      });
+        type: 'agent',
+        x: idx * agentSpacing,
+        y: 100,
+        width: 200,
+        height: 120,
+        data: agent,
+      };
+      newNodes.push(node);
+      nodeMap.set(agent.id, node);
 
       // Create tool nodes below each agent
-      const agentTools = agent.tools.map(toolName => 
-        agentData.tools.find(t => t.name === toolName)
-      ).filter(Boolean);
+      const agentTools = agent.tools
+        .map(toolName => agentData.tools.find(t => t.name === toolName))
+        .filter(Boolean) as Tool[];
 
       agentTools.forEach((tool, toolIdx) => {
-        if (tool) {
-          const toolNodeId = `${agent.id}-tool-${tool.id}`;
-          
-          // Calculate tool position: centered under agent, spread horizontally
-          const totalToolsWidth = (agentTools.length - 1) * toolSpacing;
-          const startX = idx * agentSpacing - totalToolsWidth / 2;
-          
-          newNodes.push({
-            id: toolNodeId,
-            type: 'toolNode',
-            position: { 
-              x: startX + (toolIdx * toolSpacing), 
-              y: 100 + toolOffsetY 
-            },
-            data: { 
-              ...tool,
-              isHighlighted: highlightedElements.has(tool.id)
-            },
-            sourcePosition: Position.Bottom,
-            targetPosition: Position.Top,
-          });
+        const toolNodeId = `${agent.id}-tool-${tool.id}`;
+        const totalToolsWidth = (agentTools.length - 1) * toolSpacing;
+        const startX = idx * agentSpacing - totalToolsWidth / 2;
 
-          // Add edge from agent to tool (green, vertical)
+        const toolNode: CanvasNode = {
+          id: toolNodeId,
+          type: 'tool',
+          x: startX + (toolIdx * toolSpacing),
+          y: 100 + toolOffsetY,
+          width: 130,
+          height: 80,
+          data: tool,
+        };
+        newNodes.push(toolNode);
+        nodeMap.set(toolNodeId, toolNode);
+      });
+    });
+
+    // Create edges
+    const newEdges: CanvasEdge[] = [];
+
+    // Agent to tool edges
+    agentData.agents.forEach((agent) => {
+      const agentNode = nodeMap.get(agent.id);
+      if (!agentNode) return;
+
+      const agentTools = agent.tools
+        .map(toolName => agentData.tools.find(t => t.name === toolName))
+        .filter(Boolean) as Tool[];
+
+      agentTools.forEach((tool) => {
+        const toolNodeId = `${agent.id}-tool-${tool.id}`;
+        const toolNode = nodeMap.get(toolNodeId);
+        if (toolNode) {
           newEdges.push({
             id: `${agent.id}-${toolNodeId}`,
-            source: agent.id,
-            target: toolNodeId,
-            type: 'smoothstep',
-            animated: highlightedElements.has(tool.id),
-            style: { 
-              stroke: '#10b981',
-              strokeWidth: 3,
-            },
-            markerEnd: {
-              type: MarkerType.ArrowClosed,
-              color: '#10b981',
-              width: 25,
-              height: 25,
-            },
+            type: 'agent-tool',
+            from: agentNode,
+            to: toolNode,
           });
         }
       });
     });
 
-    // Create edges for agent relationships (horizontal, red)
+    // Agent to agent edges
     agentData.relationships.forEach((rel) => {
-      newEdges.push({
-        id: rel.id,
-        source: rel.from_agent_id,
-        target: rel.to_agent_id,
-        type: 'smoothstep',
-        animated: highlightedElements.has(rel.id),
-        label: rel.type,
-        labelStyle: { 
-          fill: '#ef4444',
-          fontWeight: 700,
-          fontSize: 14,
-        },
-        labelBgStyle: {
-          fill: '#1f2937',
-          fillOpacity: 0.95,
-        },
-        style: { 
-          stroke: '#ef4444',
-          strokeWidth: 4,
-        },
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          color: '#ef4444',
-          width: 30,
-          height: 30,
-        },
-        data: rel,
-      });
+      const fromNode = nodeMap.get(rel.from_agent_id);
+      const toNode = nodeMap.get(rel.to_agent_id);
+      if (fromNode && toNode) {
+        newEdges.push({
+          id: rel.id,
+          type: 'agent-agent',
+          from: fromNode,
+          to: toNode,
+          data: rel,
+        });
+      }
     });
 
     setNodes(newNodes);
     setEdges(newEdges);
-  }, [agentData, highlightedElements, setNodes, setEdges]);
+  }, [agentData, highlightedElements]);
 
-  const onNodeClick: NodeMouseHandler = useCallback((event, node) => {
-    const data = node.data;
-    
-    if (node.type === 'agentNode') {
-      setSelectedElement({ type: 'agent', data: data as Agent });
+  // Pan handlers
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.target === e.currentTarget || (e.target as HTMLElement).classList.contains('canvas-background')) {
+      setIsDragging(true);
+      setDragStart({ x: e.clientX - transform.x, y: e.clientY - transform.y });
+    }
+  }, [transform]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (draggedNode) {
+      // Node dragging
+      const deltaX = (e.clientX - nodeDragStart.x) / transform.scale;
+      const deltaY = (e.clientY - nodeDragStart.y) / transform.scale;
+      
+      setNodes(prevNodes =>
+        prevNodes.map(node =>
+          node.id === draggedNode.id
+            ? { ...node, x: node.x + deltaX, y: node.y + deltaY }
+            : node
+        )
+      );
+      
+      setNodeDragStart({ x: e.clientX, y: e.clientY });
+    } else if (isDragging) {
+      // Canvas panning
+      setTransform(prev => ({
+        ...prev,
+        x: e.clientX - dragStart.x,
+        y: e.clientY - dragStart.y,
+      }));
+    }
+  }, [isDragging, dragStart, draggedNode, nodeDragStart, transform.scale]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+    setDraggedNode(null);
+  }, []);
+
+  // Node drag handlers
+  const handleNodeMouseDown = useCallback((e: React.MouseEvent, node: CanvasNode) => {
+    e.stopPropagation();
+    setDraggedNode(node);
+    setNodeDragStart({ x: e.clientX, y: e.clientY });
+  }, []);
+
+  // Zoom handlers
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    setTransform(prev => ({
+      ...prev,
+      scale: Math.min(Math.max(prev.scale * delta, 0.1), 2),
+    }));
+  }, []);
+
+  // Node click handler
+  const handleNodeClick = useCallback((node: CanvasNode) => {
+    if (node.type === 'agent') {
+      setSelectedElement({ type: 'agent', data: node.data as Agent });
       setPanelView('details');
-    } else if (node.type === 'toolNode') {
-      setSelectedElement({ type: 'tool', data: data as Tool });
+    } else if (node.type === 'tool') {
+      setSelectedElement({ type: 'tool', data: node.data as Tool });
       setPanelView('details');
     }
   }, [setSelectedElement, setPanelView]);
 
-  const onEdgeClick = useCallback((event: any, edge: Edge) => {
+  // Edge click handler
+  const handleEdgeClick = useCallback((edge: CanvasEdge) => {
     if (edge.data) {
-      setSelectedElement({ type: 'relationship', data: edge.data as Relationship });
+      setSelectedElement({ type: 'relationship', data: edge.data });
       setPanelView('details');
     }
   }, [setSelectedElement, setPanelView]);
@@ -213,138 +263,260 @@ export function Canvas() {
     );
   }
 
-  const nodeTypes = {
-    agentNode: AgentNodeComponent,
-    toolNode: ToolNodeComponent,
-  };
-
   return (
-    <div className="h-full w-full animate-in fade-in duration-700">
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onNodeClick={onNodeClick}
-        onEdgeClick={onEdgeClick}
-        nodeTypes={nodeTypes}
-        fitView
-        fitViewOptions={{
-          padding: 0.3,
-          includeHiddenNodes: false,
-          minZoom: 0.3,
-          maxZoom: 1.2,
-          duration: 800,
+    <div 
+      ref={canvasRef}
+      className={`h-full w-full relative overflow-hidden bg-muted/30 ${
+        draggedNode ? 'cursor-grabbing' : isDragging ? 'cursor-grabbing' : 'cursor-grab'
+      }`}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+      onWheel={handleWheel}
+    >
+      {/* Grid background */}
+      <div className="canvas-background absolute inset-0" style={{
+        backgroundImage: 'radial-gradient(circle, #333 1px, transparent 1px)',
+        backgroundSize: '20px 20px',
+        opacity: 0.3,
+      }} />
+
+      {/* Canvas content */}
+      <div
+        className="absolute inset-0"
+        style={{
+          transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
+          transformOrigin: '0 0',
+          transition: isDragging ? 'none' : 'transform 0.1s ease-out',
         }}
-        minZoom={0.1}
-        maxZoom={2}
-        defaultViewport={{ x: 0, y: 0, zoom: 0.5 }}
-        className="bg-muted/30"
-        proOptions={{ hideAttribution: true }}
-        nodesDraggable={true}
-        nodesConnectable={false}
-        elementsSelectable={true}
-        panOnDrag={true}
-        zoomOnScroll={true}
-        zoomOnPinch={true}
-        panOnScroll={false}
-        preventScrolling={true}
       >
-        <Background 
-          gap={16} 
-          size={1}
-          color="#333"
-          className="opacity-30"
-        />
-        <Controls 
-          className="bg-background border border-border rounded-lg shadow-lg"
-          showInteractive={false}
-        />
-        <MiniMap 
-          className="bg-background border border-border rounded-lg shadow-lg"
-          nodeColor={(node) => {
-            if (node.type === 'agentNode') return '#3b82f6';
-            if (node.type === 'toolNode') return '#10b981';
-            return '#6b7280';
-          }}
-          maskColor="rgba(0, 0, 0, 0.1)"
-          nodeStrokeWidth={3}
-        />
-          <MiniMap nodeStrokeWidth={3} />
-      </ReactFlow>
-    </div>
-  );
-}
+        {/* Draw edges first (behind nodes) */}
+        <svg className="absolute inset-0 pointer-events-none" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+          <defs>
+            <marker
+              id="arrowhead-green"
+              markerWidth="10"
+              markerHeight="10"
+              refX="9"
+              refY="3"
+              orient="auto"
+              markerUnits="strokeWidth"
+            >
+              <path d="M0,0 L0,6 L9,3 z" fill="#10b981" />
+            </marker>
+            <marker
+              id="arrowhead-red"
+              markerWidth="10"
+              markerHeight="10"
+              refX="9"
+              refY="3"
+              orient="auto"
+              markerUnits="strokeWidth"
+            >
+              <path d="M0,0 L0,6 L9,3 z" fill="#ef4444" />
+            </marker>
+          </defs>
+          
+          {edges.map((edge) => {
+            const fromX = edge.from.x + edge.from.width / 2;
+            const fromY = edge.from.y + edge.from.height / 2;
+            const toX = edge.to.x + edge.to.width / 2;
+            const toY = edge.to.y + edge.to.height / 2;
 
-// Agent Node Component - Simplified with minimal info
-function AgentNodeComponent({ data }: { data: any }) {
-  const isHighlighted = data.isHighlighted;
+            const isAgentTool = edge.type === 'agent-tool';
+            const color = isAgentTool ? '#10b981' : '#ef4444';
+            const strokeWidth = isAgentTool ? 3 : 4;
+            const markerId = isAgentTool ? 'arrowhead-green' : 'arrowhead-red';
 
-  return (
-    <div
-      className={`group px-5 py-4 rounded-xl border-2 transition-all duration-300 cursor-pointer shadow-lg hover:shadow-2xl ${
-        isHighlighted
-          ? 'border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 shadow-xl scale-110 ring-4 ring-yellow-400/50 animate-pulse'
-          : 'border-blue-500/60 bg-linear-to-br from-blue-50 to-indigo-50 dark:from-blue-950/50 dark:to-indigo-950/50 hover:border-blue-500 hover:scale-105'
-      }`}
-      style={{ 
-        minWidth: '200px',
-        backdropFilter: 'blur(10px)',
-      }}
-    >
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
-            🤖
-          </div>
-          <div className="flex-1">
-            <h3 className="font-bold text-base text-blue-700 dark:text-blue-300 leading-tight">
-              {data.name}
-            </h3>
-            <span className="text-xs text-blue-600/70 dark:text-blue-400/70 font-medium">
-              {data.type}
-            </span>
-          </div>
-        </div>
-        
-        {data.tools && data.tools.length > 0 && (
-          <div className="flex items-center gap-2 mt-1">
-            <span className="text-lg">🔧</span>
-            <span className="text-sm font-semibold text-green-700 dark:text-green-400">
-              {data.tools.length} {data.tools.length === 1 ? 'tool' : 'tools'}
-            </span>
-          </div>
-        )}
+            let path: string;
+
+            if (isAgentTool) {
+              // Vertical connection from agent to tool (smooth curve down)
+              const midY = (fromY + toY) / 2;
+              path = `M ${fromX} ${edge.from.y + edge.from.height} C ${fromX} ${midY}, ${toX} ${midY}, ${toX} ${edge.to.y}`;
+            } else {
+              // Horizontal connection between agents (smooth curve with arc)
+              const dx = toX - fromX;
+              const dy = toY - fromY;
+              const distance = Math.sqrt(dx * dx + dy * dy);
+              
+              // Create a curved path that arcs upward or to the side
+              const curveHeight = Math.min(distance * 0.3, 100);
+              const midX = (fromX + toX) / 2;
+              const midY = (fromY + toY) / 2 - curveHeight;
+              
+              path = `M ${fromX} ${fromY} Q ${midX} ${midY}, ${toX} ${toY}`;
+            }
+
+            return (
+              <g key={edge.id}>
+                {/* Invisible wider path for easier clicking */}
+                <path
+                  d={path}
+                  stroke="transparent"
+                  strokeWidth={strokeWidth + 10}
+                  fill="none"
+                  className="cursor-pointer pointer-events-auto"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleEdgeClick(edge);
+                  }}
+                />
+                {/* Visible path */}
+                <path
+                  d={path}
+                  stroke={color}
+                  strokeWidth={strokeWidth}
+                  fill="none"
+                  markerEnd={`url(#${markerId})`}
+                  className="cursor-pointer pointer-events-none hover:opacity-80 transition-opacity"
+                />
+                {edge.data && (
+                  <text
+                    x={(fromX + toX) / 2}
+                    y={(fromY + toY) / 2 - (isAgentTool ? 0 : 50)}
+                    textAnchor="middle"
+                    fill={color}
+                    fontSize="14"
+                    fontWeight="700"
+                    className="pointer-events-none select-none"
+                  >
+                    <tspan
+                      x={(fromX + toX) / 2}
+                      dy="-5"
+                      style={{
+                        paintOrder: 'stroke',
+                        stroke: '#1f2937',
+                        strokeWidth: '3px',
+                        fill: color,
+                      }}
+                    >
+                      {edge.data.type}
+                    </tspan>
+                  </text>
+                )}
+              </g>
+            );
+          })}
+        </svg>
+
+        {/* Draw nodes */}
+        {nodes.map((node) => {
+          const isHighlighted = highlightedElements.has(node.data.id);
+          const isAgent = node.type === 'agent';
+
+          return (
+            <div
+              key={node.id}
+              className={`absolute cursor-move transition-all duration-300 ${
+                isAgent
+                  ? 'group px-5 py-4 rounded-xl border-2 shadow-lg hover:shadow-2xl ' +
+                    (isHighlighted
+                      ? 'border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 shadow-xl scale-110 ring-4 ring-yellow-400/50 animate-pulse'
+                      : 'border-blue-500/60 bg-linear-to-br from-blue-50 to-indigo-50 dark:from-blue-950/50 dark:to-indigo-950/50 hover:border-blue-500 hover:scale-105')
+                  : 'group px-3 py-2.5 rounded-lg border-2 shadow-md hover:shadow-lg ' +
+                    (isHighlighted
+                      ? 'border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 shadow-xl scale-110 ring-4 ring-yellow-400/50 animate-pulse'
+                      : 'border-green-500/60 bg-linear-to-br from-green-50 to-emerald-50 dark:from-green-950/50 dark:to-emerald-950/50 hover:border-green-500 hover:scale-105')
+              }`}
+              style={{
+                left: node.x,
+                top: node.y,
+                width: node.width,
+                backdropFilter: 'blur(10px)',
+              }}
+              onMouseDown={(e) => handleNodeMouseDown(e, node)}
+              onClick={(e) => {
+                if (!draggedNode) {
+                  e.stopPropagation();
+                  handleNodeClick(node);
+                }
+              }}
+            >
+              {isAgent ? (
+                <AgentNode data={node.data as Agent} />
+              ) : (
+                <ToolNode data={node.data as Tool} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Zoom controls */}
+      <div className="absolute bottom-4 left-4 flex flex-col gap-2 bg-background border border-border rounded-lg shadow-lg p-2">
+        <button
+          onClick={() => setTransform(prev => ({ ...prev, scale: Math.min(prev.scale * 1.2, 2) }))}
+          className="w-8 h-8 flex items-center justify-center hover:bg-muted rounded transition-colors"
+          title="Zoom In"
+        >
+          +
+        </button>
+        <button
+          onClick={() => setTransform(prev => ({ ...prev, scale: Math.max(prev.scale * 0.8, 0.1) }))}
+          className="w-8 h-8 flex items-center justify-center hover:bg-muted rounded transition-colors"
+          title="Zoom Out"
+        >
+          −
+        </button>
+        <button
+          onClick={() => setTransform({ x: 0, y: 0, scale: 0.8 })}
+          className="w-8 h-8 flex items-center justify-center hover:bg-muted rounded transition-colors text-xs"
+          title="Reset View"
+        >
+          ⟲
+        </button>
+      </div>
+
+      {/* Mini info */}
+      <div className="absolute top-4 right-4 bg-background/90 border border-border rounded-lg shadow-lg px-3 py-2 text-sm backdrop-blur">
+        Zoom: {Math.round(transform.scale * 100)}%
       </div>
     </div>
   );
 }
 
-// Tool Node Component - Simplified minimal display
-function ToolNodeComponent({ data }: { data: any }) {
-  const isHighlighted = data.isHighlighted;
-
+// Agent Node Component
+function AgentNode({ data }: { data: Agent }) {
   return (
-    <div
-      className={`group px-3 py-2.5 rounded-lg border-2 transition-all duration-300 cursor-pointer shadow-md hover:shadow-lg ${
-        isHighlighted
-          ? 'border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 shadow-xl scale-110 ring-4 ring-yellow-400/50 animate-pulse'
-          : 'border-green-500/60 bg-linear-to-br from-green-50 to-emerald-50 dark:from-green-950/50 dark:to-emerald-950/50 hover:border-green-500 hover:scale-105'
-      }`}
-      style={{ 
-        minWidth: '120px',
-        maxWidth: '140px',
-        backdropFilter: 'blur(10px)',
-      }}
-    >
-      <div className="flex flex-col items-center gap-1.5">
-        <div className="w-7 h-7 rounded-lg bg-green-500/20 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
-          🔧
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
+          🤖
         </div>
-        <span className="text-xs font-semibold text-green-700 dark:text-green-300 text-center line-clamp-2 leading-tight">
-          {data.name}
-        </span>
+        <div className="flex-1">
+          <h3 className="font-bold text-base text-blue-700 dark:text-blue-300 leading-tight">
+            {data.name}
+          </h3>
+          <span className="text-xs text-blue-600/70 dark:text-blue-400/70 font-medium">
+            {data.type}
+          </span>
+        </div>
       </div>
+      
+      {data.tools && data.tools.length > 0 && (
+        <div className="flex items-center gap-2 mt-1">
+          <span className="text-lg">🔧</span>
+          <span className="text-sm font-semibold text-green-700 dark:text-green-400">
+            {data.tools.length} {data.tools.length === 1 ? 'tool' : 'tools'}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Tool Node Component
+function ToolNode({ data }: { data: Tool }) {
+  return (
+    <div className="flex flex-col items-center gap-1.5">
+      <div className="w-7 h-7 rounded-lg bg-green-500/20 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
+        🔧
+      </div>
+      <span className="text-xs font-semibold text-green-700 dark:text-green-300 text-center line-clamp-2 leading-tight">
+        {data.name}
+      </span>
     </div>
   );
 }
