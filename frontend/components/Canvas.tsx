@@ -2,28 +2,29 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from '@/lib/store';
-import { Agent, Tool, Relationship } from '@/types';
+import { Agent, Tool, Relationship, TestCase } from '@/types';
 
 interface CanvasNode {
   id: string;
-  type: 'agent' | 'tool';
+  type: 'agent' | 'tool' | 'test';
   x: number;
   y: number;
   width: number;
   height: number;
-  data: Agent | Tool | (Tool & { parentAgentId?: string });
+  data: Agent | Tool | (Tool & { parentAgentId?: string }) | TestCase;
 }
 
 interface CanvasEdge {
   id: string;
-  type: 'agent-tool' | 'agent-agent';
+  type: 'agent-tool' | 'agent-agent' | 'test-target';
   from: CanvasNode;
   to: CanvasNode;
   data?: Relationship;
+  color?: string;
 }
 
 export function Canvas() {
-  const { agentData, isLoading, loadingMessage, highlightedElements, errorHighlightedElements, setSelectedElement, setPanelView } = useStore();
+  const { agentData, isLoading, loadingMessage, highlightedElements, errorHighlightedElements, setSelectedElement, setPanelView, testCases, testResults, currentTestIndex, isTestingInProgress } = useStore();
   const canvasRef = useRef<HTMLDivElement>(null);
   const [nodes, setNodes] = useState<CanvasNode[]>([]);
   const [edges, setEdges] = useState<CanvasEdge[]>([]);
@@ -126,6 +127,89 @@ export function Canvas() {
     setEdges(newEdges);
   }, [agentData]);
 
+  // Add test nodes when test cases are available
+  useEffect(() => {
+    if (!testCases || testCases.length === 0 || !agentData) return;
+
+    setNodes(prevNodes => {
+      // Remove old test nodes
+      const nonTestNodes = prevNodes.filter(n => n.type !== 'test');
+      const nodeMap = new Map(nonTestNodes.map(n => [n.id, n]));
+      
+      // Create test nodes on the right side of the canvas
+      const testNodes: CanvasNode[] = [];
+      const testStartX = 1200; // Start tests to the right
+      const testSpacing = 150;
+      const testsPerColumn = 5;
+      
+      testCases.forEach((testCase, idx) => {
+        const col = Math.floor(idx / testsPerColumn);
+        const row = idx % testsPerColumn;
+        
+        const testNode: CanvasNode = {
+          id: `test-${testCase.id}`,
+          type: 'test',
+          x: testStartX + (col * 220),
+          y: 100 + (row * testSpacing),
+          width: 180,
+          height: 100,
+          data: testCase,
+        };
+        testNodes.push(testNode);
+        nodeMap.set(testNode.id, testNode);
+      });
+
+      return [...nonTestNodes, ...testNodes];
+    });
+
+    // Add edges from test nodes to their targets
+    setEdges(prevEdges => {
+      // Remove old test edges
+      const nonTestEdges = prevEdges.filter(e => e.type !== 'test-target');
+      const testEdges: CanvasEdge[] = [];
+
+      testCases.forEach((testCase) => {
+        const testNodeId = `test-${testCase.id}`;
+        const targetIds = testCase.highlight_elements || [];
+        
+        // Get test node
+        const testNode = nodes.find(n => n.id === testNodeId);
+        if (!testNode) return;
+
+        // Create edges to all highlighted elements
+        targetIds.forEach(targetId => {
+          const targetNode = nodes.find(n => 
+            n.id === targetId || 
+            (n.type === 'tool' && n.id.includes(targetId))
+          );
+          
+          if (targetNode) {
+            // Determine color based on test result
+            const result = testResults.get(testCase.id);
+            let color = '#6b7280'; // default gray
+            if (result) {
+              if (result.status === 'passed') color = '#22c55e'; // green
+              else if (result.status === 'failed') color = '#ef4444'; // red
+              else if (result.status === 'warning') color = '#f59e0b'; // amber
+            } else if (isTestingInProgress && testCases[currentTestIndex]?.id === testCase.id) {
+              color = '#3b82f6'; // blue for currently running
+            }
+
+            testEdges.push({
+              id: `test-edge-${testCase.id}-${targetId}`,
+              type: 'test-target',
+              from: testNode,
+              to: targetNode,
+              color,
+            });
+          }
+        });
+      });
+
+      return [...nonTestEdges, ...testEdges];
+    });
+  }, [testCases, agentData, nodes, testResults, isTestingInProgress, currentTestIndex]);
+
   // Update edge references when nodes move
   useEffect(() => {
     if (nodes.length === 0 || edges.length === 0) return;
@@ -204,6 +288,9 @@ export function Canvas() {
       setPanelView('details');
     } else if (node.type === 'tool') {
       setSelectedElement({ type: 'tool', data: node.data as Tool });
+      setPanelView('details');
+    } else if (node.type === 'test') {
+      setSelectedElement({ type: 'test', data: node.data as TestCase });
       setPanelView('details');
     }
   }, [setSelectedElement, setPanelView]);

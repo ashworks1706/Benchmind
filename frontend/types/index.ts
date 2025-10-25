@@ -145,6 +145,6 @@ export interface StatusMessage {
 
 export type PanelView = 'status' | 'details' | 'both' | 'testing' | 'testing-report';
 export type SelectedElement = {
-  type: 'agent' | 'tool' | 'relationship' | 'edge';
-  data: Agent | Tool | Relationship | any;
+  type: 'agent' | 'tool' | 'relationship' | 'edge' | 'test';
+  data: Agent | Tool | Relationship | TestCase | any;
 } | null;

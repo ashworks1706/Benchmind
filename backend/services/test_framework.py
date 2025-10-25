@@ -4,6 +4,7 @@ from typing import Dict, List, Any
 import time
 import google.generativeai as genai
 from config import Config
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 
 genai.configure(api_key=Config.GEMINI_API_KEY)
 
@@ -187,8 +188,20 @@ REMEMBER: This is a DISTILLED, FILTERED testing environment - NOT actual code ex
                     "progress": 15
                 })
             
-            response = self.model.generate_content(prompt)
-            text = response.text.strip()
+            # Use ThreadPoolExecutor for timeout
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(self.model.generate_content, prompt)
+                try:
+                    response = future.result(timeout=20)  # 20 second timeout
+                    text = response.text.strip()
+                except FuturesTimeoutError:
+                    print("Framework generation timed out after 20 seconds")
+                    if progress_callback:
+                        progress_callback("status", {
+                            "message": "⚠️ AI timed out, using default framework...",
+                            "progress": 20
+                        })
+                    return self._get_fallback_framework(agent_data)
             
             # Extract JSON
             import re

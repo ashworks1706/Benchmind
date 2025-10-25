@@ -3,6 +3,7 @@ import json
 import google.generativeai as genai
 from typing import Dict, List, Any, Optional
 from config import Config
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 
 genai.configure(api_key=Config.GEMINI_API_KEY)
 
@@ -113,8 +114,15 @@ If no agents are found, return an empty array [].
 """
         
         try:
-            response = self.model.generate_content(prompt)
-            text = response.text.strip()
+            # Use ThreadPoolExecutor for timeout
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(self.model.generate_content, prompt)
+                try:
+                    response = future.result(timeout=30)  # 30 second timeout
+                    text = response.text.strip()
+                except (FuturesTimeoutError, Exception) as e:
+                    print(f"Agent extraction timed out or failed for {file['path']}: {str(e)}")
+                    return []
             
             # Extract JSON from response
             json_match = re.search(r'\[.*\]', text, re.DOTALL)
@@ -182,8 +190,15 @@ Return as JSON array with this structure:
 """
         
         try:
-            response = self.model.generate_content(prompt)
-            text = response.text.strip()
+            # Use ThreadPoolExecutor for timeout
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(self.model.generate_content, prompt)
+                try:
+                    response = future.result(timeout=30)  # 30 second timeout
+                    text = response.text.strip()
+                except (FuturesTimeoutError, Exception) as e:
+                    print(f"Tool extraction timed out or failed for {file['path']}: {str(e)}")
+                    return []
             
             json_match = re.search(r'\[.*\]', text, re.DOTALL)
             if json_match:
@@ -240,8 +255,15 @@ Return as JSON array:
 """
         
         try:
-            response = self.model.generate_content(prompt)
-            text = response.text.strip()
+            # Use ThreadPoolExecutor for timeout
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(self.model.generate_content, prompt)
+                try:
+                    response = future.result(timeout=30)  # 30 second timeout
+                    text = response.text.strip()
+                except (FuturesTimeoutError, Exception) as e:
+                    print(f"Relationship identification timed out or failed: {str(e)}")
+                    return []
             
             json_match = re.search(r'\[.*\]', text, re.DOTALL)
             if json_match:

@@ -5,6 +5,7 @@ import google.generativeai as genai
 from typing import Dict, List, Any, Callable
 from config import Config
 from services.test_framework import AgentTestFramework, TestFrameworkGenerator
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 
 genai.configure(api_key=Config.GEMINI_API_KEY)
 
@@ -48,7 +49,21 @@ class TestGenerator:
                 "progress": 10
             })
         
-        self.framework_definition = self.framework_generator.generate_framework(agent_data, progress_callback)
+        try:
+            self.framework_definition = self.framework_generator.generate_framework(agent_data, progress_callback)
+        except Exception as fw_error:
+            print(f"Framework generation failed: {str(fw_error)}")
+            if progress_callback:
+                progress_callback("status", {
+                    "message": "⚠️ Using default framework (AI generation timed out)...",
+                    "progress": 25
+                })
+            # Use default framework
+            self.framework_definition = {
+                'framework_name': 'Default Testing Framework',
+                'test_categories': [],
+                'performance_benchmarks': {}
+            }
         
         # Step 2: Initialize test framework with custom definition
         self.test_framework = AgentTestFramework(agent_data, self.framework_definition)
@@ -135,8 +150,28 @@ IMPORTANT for highlight_elements:
                     "progress": 40
                 })
             
-            response = self.model.generate_content(prompt)
-            text = response.text.strip()
+            # Use ThreadPoolExecutor for timeout
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(self.model.generate_content, prompt)
+                try:
+                    response = future.result(timeout=30)  # 30 second timeout
+                    text = response.text.strip()
+                except FuturesTimeoutError:
+                    print("Test generation timed out after 30 seconds")
+                    if progress_callback:
+                        progress_callback("status", {
+                            "message": "⚠️ AI generation timed out, using fallback test generation...",
+                            "progress": 50
+                        })
+                    return self._generate_fallback_tests(agent_data, progress_callback)
+                except Exception as api_error:
+                    print(f"API call failed: {str(api_error)}")
+                    if progress_callback:
+                        progress_callback("status", {
+                            "message": "⚠️ AI generation failed, using fallback test generation...",
+                            "progress": 50
+                        })
+                    return self._generate_fallback_tests(agent_data, progress_callback)
             
             # Extract JSON
             json_match = re.search(r'\[.*\]', text, re.DOTALL)
@@ -178,6 +213,120 @@ IMPORTANT for highlight_elements:
                 })
             print(f"Error generating test cases: {str(e)}")
             return []
+    
+    def _generate_fallback_tests(
+        self,
+        agent_data: Dict[str, Any],
+        progress_callback: Callable[[str, Dict], None] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Generate basic test cases without AI when API fails
+        """
+        agents = agent_data.get('agents', [])
+        tools = agent_data.get('tools', [])
+        relationships = agent_data.get('relationships', [])
+        
+        test_cases = []
+        test_id = 1
+        
+        # Generate test for each agent
+        for i, agent in enumerate(agents[:5]):  # Limit to 5 agents
+            agent_id = agent.get('id', f'agent_{i}')
+            agent_name = agent.get('name', f'Agent {i+1}')
+            
+            test_cases.append({
+                'id': f'test_case_{test_id}',
+                'name': f'Tool Calling Test - {agent_name}',
+                'category': 'tool_calling',
+                'description': f'Verify {agent_name} correctly selects and calls appropriate tools',
+                'target': {
+                    'type': 'agent',
+                    'id': agent_id,
+                    'name': agent_name
+                },
+                'test_input': 'Test scenario requiring tool usage',
+                'expected_behavior': 'Agent selects correct tool and executes successfully',
+                'success_criteria': 'Tool accuracy >= 90%',
+                'highlight_elements': [agent_id],
+                'metrics': [
+                    {
+                        'name': 'Tool Accuracy',
+                        'unit': '%',
+                        'benchmark': 90,
+                        'description': 'Percentage of correct tool selections'
+                    }
+                ],
+                'estimated_duration': 2.0
+            })
+            test_id += 1
+            
+            # Add reasoning test
+            test_cases.append({
+                'id': f'test_case_{test_id}',
+                'name': f'Reasoning Test - {agent_name}',
+                'category': 'reasoning',
+                'description': f'Evaluate {agent_name} reasoning and decision-making quality',
+                'target': {
+                    'type': 'agent',
+                    'id': agent_id,
+                    'name': agent_name
+                },
+                'test_input': 'Complex scenario requiring logical reasoning',
+                'expected_behavior': 'Agent demonstrates clear, logical reasoning',
+                'success_criteria': 'Reasoning score >= 85%',
+                'highlight_elements': [agent_id],
+                'metrics': [
+                    {
+                        'name': 'Reasoning Score',
+                        'unit': '%',
+                        'benchmark': 85,
+                        'description': 'Quality of logical reasoning and decision-making'
+                    }
+                ],
+                'estimated_duration': 2.5
+            })
+            test_id += 1
+            
+            if progress_callback:
+                progress_callback("test_case_generated", {
+                    "message": f"✅ Generated fallback tests for {agent_name}",
+                    "progress": 50 + ((i + 1) / len(agents[:5]) * 40)
+                })
+        
+        # Add performance test
+        if agents:
+            test_cases.append({
+                'id': f'test_case_{test_id}',
+                'name': 'System Performance Test',
+                'category': 'performance',
+                'description': 'Measure overall system response time and throughput',
+                'target': {
+                    'type': 'agent',
+                    'id': agents[0].get('id', 'agent_1'),
+                    'name': agents[0].get('name', 'Primary Agent')
+                },
+                'test_input': 'Load test scenario',
+                'expected_behavior': 'System maintains acceptable response times',
+                'success_criteria': 'Response time < 500ms',
+                'highlight_elements': [agents[0].get('id', 'agent_1')],
+                'metrics': [
+                    {
+                        'name': 'Response Time',
+                        'unit': 'ms',
+                        'benchmark': 500,
+                        'description': 'Average response time per request'
+                    }
+                ],
+                'estimated_duration': 3.0
+            })
+        
+        if progress_callback:
+            progress_callback("status", {
+                "message": f"✨ Generated {len(test_cases)} fallback test cases!",
+                "progress": 100
+            })
+        
+        return test_cases[:Config.MAX_TEST_CASES]
     
     def _generate_recommendations(
         self,
@@ -617,8 +766,19 @@ Return the COMPLETE updated test suite as JSON array with the same structure:
                     "message": "🤖 AI updating test cases..."
                 })
             
-            response = self.model.generate_content(prompt)
-            text = response.text.strip()
+            # Use ThreadPoolExecutor for timeout
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(self.model.generate_content, prompt)
+                try:
+                    response = future.result(timeout=30)  # 30 second timeout
+                    text = response.text.strip()
+                except (FuturesTimeoutError, Exception) as e:
+                    print(f"Recommendations generation failed: {str(e)}")
+                    if progress_callback:
+                        progress_callback("status", {
+                            "message": "⚠️ Could not generate recommendations, using current tests"
+                        })
+                    return current_test_cases
             
             json_match = re.search(r'\[.*\]', text, re.DOTALL)
             if json_match:
