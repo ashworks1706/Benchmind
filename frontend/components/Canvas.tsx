@@ -159,20 +159,12 @@ export function Canvas() {
       const deltaX = (e.clientX - nodeDragStart.x) / transform.scale;
       const deltaY = (e.clientY - nodeDragStart.y) / transform.scale;
       
-      setNodes(prevNodes => prevNodes.map(node => {
-        // Move the dragged node
-        if (node.id === draggedNode.id) {
-          return { ...node, x: node.x + deltaX, y: node.y + deltaY };
-        }
-        // If dragged node is an agent, also move all its tool children
-        if (draggedNode.type === 'agent' && node.type === 'tool') {
-          const toolData = node.data as Tool & { parentAgentId?: string };
-          if (toolData.parentAgentId === draggedNode.id) {
-            return { ...node, x: node.x + deltaX, y: node.y + deltaY };
-          }
-        }
-        return node;
-      }));
+      // Only move the dragged node itself, not its children
+      setNodes(prevNodes => prevNodes.map(node => 
+        node.id === draggedNode.id 
+          ? { ...node, x: node.x + deltaX, y: node.y + deltaY }
+          : node
+      ));
       
       setNodeDragStart({ x: e.clientX, y: e.clientY });
     } else if (isDragging && dragStart) {
