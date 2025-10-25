@@ -21,6 +21,7 @@ import {
   Award
 } from 'lucide-react';
 import { useState } from 'react';
+import { useEffect } from 'react';
 import { apiService } from '@/lib/api';
 import { Fix } from '@/types';
 
@@ -102,8 +103,50 @@ const METRIC_DEFINITIONS = {
 };
 
 export default function TestReportPanel() {
-  const { testReport, setPanelView, addStatusMessage, agentData, addQueuedChange, highlightElements, clearHighlights } = useStore();
+  const { testReport, setPanelView, addStatusMessage, agentData, addQueuedChange, highlightElements, clearHighlights, highlightWarningElements } = useStore();
   const [expandedMetric, setExpandedMetric] = useState<string | null>(null);
+
+  // Highlight elements with recommendations when report loads
+  useEffect(() => {
+    if (!testReport || !agentData) return;
+
+    const elementsWithIssues = new Set<string>();
+
+    // Go through all test results and find elements with recommendations
+    testReport.test_results?.forEach((result: any) => {
+      if (result.recommendations && result.recommendations.length > 0) {
+        result.recommendations.forEach((rec: any) => {
+          const filePath = rec.fix?.file_path;
+          if (!filePath) return;
+
+          // Try to find matching agent
+          const matchingAgent = agentData.agents?.find((agent: any) => {
+            const fileMatch = agent.file_path === filePath;
+            const nameMatch = filePath.toLowerCase().includes(agent.name.toLowerCase().replace(/\s+/g, '_'));
+            return fileMatch || nameMatch;
+          });
+
+          if (matchingAgent) {
+            elementsWithIssues.add(matchingAgent.id);
+          }
+
+          // Try to find matching tool
+          const matchingTool = agentData.tools?.find((tool: any) => {
+            const fileMatch = tool.file_path === filePath;
+            const nameMatch = filePath.toLowerCase().includes(tool.name.toLowerCase().replace(/\s+/g, '_'));
+            return fileMatch || nameMatch;
+          });
+
+          if (matchingTool) {
+            elementsWithIssues.add(matchingTool.id);
+          }
+        });
+      }
+    });
+
+    console.log('🎨 Highlighting elements with recommendations:', Array.from(elementsWithIssues));
+    highlightWarningElements(Array.from(elementsWithIssues));
+  }, [testReport, agentData, highlightWarningElements]);
 
   const handleBackToTests = () => {
     setPanelView('testing');

@@ -59,6 +59,8 @@ interface AppState {
   clearHighlights: () => void;
   highlightErrorElements: (elementIds: string[]) => void;
   clearErrorHighlights: () => void;
+  highlightWarningElements: (elementIds: string[]) => void;
+  clearWarningHighlights: () => void;
   startTesting: () => void;
   stopTesting: () => void;
   setCurrentTestIndex: (index: number) => void;
@@ -176,6 +178,11 @@ export const useStore = create<AppState>((set) => ({
   
   clearErrorHighlights: () => set({ errorHighlightedElements: new Set() }),
   
+  highlightWarningElements: (elementIds) =>
+    set({ warningHighlightedElements: new Set(elementIds) }),
+  
+  clearWarningHighlights: () => set({ warningHighlightedElements: new Set() }),
+  
   startTesting: () =>
     set({ isTestingInProgress: true, currentTestIndex: 0 }),
   
@@ -285,6 +292,8 @@ export const useStore = create<AppState>((set) => ({
       selectedElement: null,
       panelView: 'status',
       highlightedElements: new Set(),
+      errorHighlightedElements: new Set(),
+      warningHighlightedElements: new Set(),
       isTestingInProgress: false,
       currentTestIndex: -1,
     });

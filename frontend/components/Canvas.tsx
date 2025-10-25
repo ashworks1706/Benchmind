@@ -24,7 +24,7 @@ interface CanvasEdge {
 }
 
 export function Canvas() {
-  const { agentData, isLoading, loadingMessage, highlightedElements, errorHighlightedElements, setSelectedElement, setPanelView, testCases, pendingTestCases, testResults, currentTestIndex, isTestingInProgress } = useStore();
+  const { agentData, isLoading, loadingMessage, highlightedElements, errorHighlightedElements, warningHighlightedElements, setSelectedElement, setPanelView, testCases, pendingTestCases, testResults, currentTestIndex, isTestingInProgress } = useStore();
   const canvasRef = useRef<HTMLDivElement>(null);
   const [nodes, setNodes] = useState<CanvasNode[]>([]);
   const [edges, setEdges] = useState<CanvasEdge[]>([]);
@@ -589,6 +589,9 @@ export function Canvas() {
           const isErrorHighlighted = node.type === 'test'
             ? errorHighlightedElements.has(node.id)
             : errorHighlightedElements.has(node.data.id);
+          const isWarningHighlighted = node.type === 'test'
+            ? warningHighlightedElements.has(node.id)
+            : warningHighlightedElements.has(node.data.id);
           const isAgent = node.type === 'agent';
           const isTest = node.type === 'test';
           
@@ -634,6 +637,11 @@ export function Canvas() {
             borderClass = 'border-red-500';
             bgClass = 'bg-red-50 dark:bg-red-900/20';
             effectClass = 'shadow-xl scale-110 ring-4 ring-red-500/50 animate-pulse';
+          } else if (isWarningHighlighted) {
+            // Persistent warning highlight for elements with recommendations
+            borderClass = 'border-orange-500';
+            bgClass = 'bg-orange-50 dark:bg-orange-900/20';
+            effectClass = 'shadow-lg ring-2 ring-orange-500/50';
           } else if (isHighlighted) {
             borderClass = 'border-yellow-400';
             bgClass = 'bg-yellow-50 dark:bg-yellow-900/20';
@@ -673,7 +681,14 @@ export function Canvas() {
               }}
             >
               {isAgent ? (
-                <AgentNode data={node.data as Agent} />
+                <>
+                  <AgentNode data={node.data as Agent} />
+                  {isWarningHighlighted && (
+                    <div className="absolute -top-2 -right-2 bg-orange-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center shadow-lg animate-bounce">
+                      ⚠️
+                    </div>
+                  )}
+                </>
               ) : isTest ? (
                 <TestNode 
                   data={node.data as TestCase} 
@@ -681,7 +696,14 @@ export function Canvas() {
                   isRunning={isRunningTest}
                 />
               ) : (
-                <ToolNode data={node.data as Tool} />
+                <>
+                  <ToolNode data={node.data as Tool} />
+                  {isWarningHighlighted && (
+                    <div className="absolute -top-2 -right-2 bg-orange-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center shadow-lg animate-bounce">
+                      ⚠️
+                    </div>
+                  )}
+                </>
               )}
             </div>
           );
