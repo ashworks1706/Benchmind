@@ -188,35 +188,51 @@ export default function TestReportPanel() {
       const filePath = recommendation.fix.file_path;
       let elementIdToHighlight: string | null = null;
 
+      console.log('🔍 Looking for element to highlight:', {
+        filePath,
+        issue: recommendation.issue,
+        availableAgents: agentData.agents?.map((a: any) => ({ id: a.id, name: a.name, file_path: a.file_path })),
+        availableTools: agentData.tools?.map((t: any) => ({ id: t.id, name: t.name, file_path: t.file_path }))
+      });
+
       // Try to find the agent/tool that matches this file path
       if (agentData.agents) {
-        const matchingAgent = agentData.agents.find((agent: any) => 
-          agent.file_path === filePath || 
-          filePath.includes(agent.name.toLowerCase())
-        );
+        const matchingAgent = agentData.agents.find((agent: any) => {
+          const fileMatch = agent.file_path === filePath;
+          const nameMatch = filePath.toLowerCase().includes(agent.name.toLowerCase().replace(/\s+/g, '_'));
+          console.log('🔎 Checking agent:', agent.name, { fileMatch, nameMatch, agent_path: agent.file_path });
+          return fileMatch || nameMatch;
+        });
         if (matchingAgent) {
           elementIdToHighlight = matchingAgent.id;
+          console.log('✅ Found matching agent:', matchingAgent.name, matchingAgent.id);
         }
       }
 
       if (agentData.tools && !elementIdToHighlight) {
-        const matchingTool = agentData.tools.find((tool: any) => 
-          tool.file_path === filePath || 
-          filePath.includes(tool.name.toLowerCase())
-        );
+        const matchingTool = agentData.tools.find((tool: any) => {
+          const fileMatch = tool.file_path === filePath;
+          const nameMatch = filePath.toLowerCase().includes(tool.name.toLowerCase().replace(/\s+/g, '_'));
+          console.log('🔎 Checking tool:', tool.name, { fileMatch, nameMatch, tool_path: tool.file_path });
+          return fileMatch || nameMatch;
+        });
         if (matchingTool) {
           elementIdToHighlight = matchingTool.id;
+          console.log('✅ Found matching tool:', matchingTool.name, matchingTool.id);
         }
       }
 
       // Highlight the element on canvas (use regular highlight, not error)
       if (elementIdToHighlight) {
+        console.log('🎯 Highlighting element:', elementIdToHighlight);
         highlightElements([elementIdToHighlight]);
         
         // Auto-clear highlight after 3 seconds
         setTimeout(() => {
           clearHighlights();
         }, 3000);
+      } else {
+        console.warn('⚠️ No matching element found for file path:', filePath);
       }
 
       // Queue the fix instead of applying immediately

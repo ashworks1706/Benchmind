@@ -33,6 +33,7 @@ interface AppState {
   panelView: PanelView;
   highlightedElements: Set<string>;
   errorHighlightedElements: Set<string>; // For failed/warning tests
+  warningHighlightedElements: Set<string>; // For elements with recommendations/warnings
   isTestingInProgress: boolean;
   currentTestIndex: number;
   
@@ -105,6 +106,7 @@ export const useStore = create<AppState>((set) => ({
   panelView: 'status',
   highlightedElements: new Set(),
   errorHighlightedElements: new Set(),
+  warningHighlightedElements: new Set(),
   isTestingInProgress: false,
   currentTestIndex: -1,
   
