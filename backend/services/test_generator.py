@@ -109,7 +109,7 @@ Return as JSON array with this EXACT structure:
     "test_input": "Specific input or scenario",
     "expected_behavior": "Expected outcome",
     "success_criteria": "How to determine pass/fail",
-    "highlight_elements": ["element_ids_to_highlight"],
+    "highlight_elements": ["target.id", "related_agent_id", "related_tool_id"],
     "metrics": [{{
         "name": "accuracy|reasoning_score|collaboration_efficiency|connection_rate|response_time|recovery_rate|quality_score|security_score",
         "unit": "%|ms|score",
@@ -121,6 +121,13 @@ Return as JSON array with this EXACT structure:
 
 Make tests SPECIFIC to the actual agents/tools/relationships in the provided data.
 Each test should have clear metrics that can be measured.
+
+IMPORTANT for highlight_elements:
+- For agent tests: Include the agent.id
+- For tool tests: Include the agent.id that uses the tool (tools are visually grouped under agents)
+- For relationship tests: Include the relationship.id (which is the edge ID)
+- For collaborative tests: Include all involved agent IDs
+- Use actual IDs from the provided data above
 """
         
         try:
@@ -218,9 +225,23 @@ Each test should have clear metrics that can be measured.
         else:
             target_info = None
         
+        # Varied engaging messages based on test category
+        category = test_case.get('category', '')
+        engaging_messages = {
+            'tool_calling': "⚡ Testing tool integration and parameter passing...",
+            'reasoning': "🧠 Evaluating reasoning capability and decision logic...",
+            'collaborative': "🤝 Checking agent collaboration and communication...",
+            'connection': "🔗 Verifying relationship flow and data passing...",
+            'performance': "📊 Measuring response time and resource usage...",
+            'error_handling': "🛡️ Testing error recovery and edge cases...",
+            'output_quality': "✨ Analyzing output quality and relevance...",
+            'security': "🔒 Checking security vulnerabilities and validation..."
+        }
+        
         if progress_callback:
+            message = engaging_messages.get(category, "⚡ Executing test case...")
             progress_callback("status", {
-                "message": f"⚡ Executing test case..."
+                "message": message
             })
         
         # Execute test using Gemini to simulate and evaluate

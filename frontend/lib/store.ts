@@ -57,7 +57,7 @@ interface AppState {
   addTestingProgress: (progress: any) => void;
   clearTestingProgress: () => void;
   setTestReport: (report: any) => void;
-  setPendingTestCases: (cases: TestCase[]) => void;
+  setPendingTestCases: (cases: TestCase[] | ((prev: TestCase[]) => TestCase[])) => void;
   
   loadFromLocalStorage: () => void;
   clearLocalStorage: () => void;
@@ -175,7 +175,9 @@ export const useStore = create<AppState>((set) => ({
   
   setTestReport: (report) => set({ testReport: report }),
   
-  setPendingTestCases: (cases) => set({ pendingTestCases: cases }),
+  setPendingTestCases: (cases) => set((state) => ({
+    pendingTestCases: typeof cases === 'function' ? cases(state.pendingTestCases || []) : cases
+  })),
   
   loadFromLocalStorage: () => {
     if (typeof window !== 'undefined') {

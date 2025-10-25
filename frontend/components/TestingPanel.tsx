@@ -79,27 +79,47 @@ export default function TestingPanel() {
       
       setTestingStatus(data.status as any);
       
-      // Add new progress messages
-      if (data.progress && data.progress.length > 0) {
-        const lastProgress = data.progress[data.progress.length - 1];
-        addTestingProgress(lastProgress);
-        
-        // Add to status messages
-        if (lastProgress.data?.message) {
-          addStatusMessage({
-            type: lastProgress.type === 'error' ? 'error' : 'info',
-            message: lastProgress.data.message,
-          });
-        }
+      // Process ALL progress messages from backend
+      if (data.progress && data.progress.length > testingProgress.length) {
+        // Add only new progress messages
+        const newMessages = data.progress.slice(testingProgress.length);
+        newMessages.forEach(progress => {
+          addTestingProgress(progress);
+          
+          // Add to status messages
+          if (progress.data?.message) {
+            addStatusMessage({
+              type: progress.type === 'error' ? 'error' : 'info',
+              message: progress.data.message,
+            });
+          }
 
-        // Handle highlighting
-        if (lastProgress.data?.highlight_elements) {
-          highlightElements(lastProgress.data.highlight_elements);
-        }
+          // Handle highlighting - extract element IDs
+          if (progress.data?.highlight_elements && progress.data.highlight_elements.length > 0) {
+            highlightElements(progress.data.highlight_elements);
+            
+            // Auto-clear highlights after 3 seconds unless it's a new test starting
+            if (progress.type !== 'test_started') {
+              setTimeout(() => {
+                clearHighlights();
+              }, 3000);
+            }
+          }
+          
+          // Handle test case generation - update pending list incrementally
+          if (progress.type === 'test_case_generated' && progress.data?.test_case) {
+            setPendingTestCases(prev => {
+              // Check if this test case already exists
+              const exists = prev.some(tc => tc.id === progress.data.test_case.id);
+              if (exists) return prev;
+              return [...prev, progress.data.test_case];
+            });
+          }
+        });
       }
 
-      // Store test cases
-      if (data.test_cases && data.test_cases.length > 0) {
+      // Store final test cases when ready
+      if (data.test_cases && data.test_cases.length > 0 && data.status === 'ready_for_confirmation') {
         setPendingTestCases(data.test_cases);
       }
 
@@ -116,7 +136,7 @@ export default function TestingPanel() {
     } catch (error: any) {
       console.error('Error polling progress:', error);
     }
-  }, [testingSessionId, isPolling, addTestingProgress, addStatusMessage, highlightElements, setPendingTestCases, setTestingStatus, setTestReport]);
+  }, [testingSessionId, isPolling, testingProgress.length, addTestingProgress, addStatusMessage, highlightElements, clearHighlights, setPendingTestCases, setTestingStatus, setTestReport]);
 
   // Poll every 2 seconds when active
   useEffect(() => {
