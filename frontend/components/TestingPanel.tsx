@@ -154,7 +154,7 @@ import {
           
           // Highlight failed/warning tests in canvas for visualization
           if (reportData.report) {
-            const failedTestIds: string[] = [];
+            const failedElementIds: string[] = [];
             
             // Collect highlight elements from failed/warning tests
             if (reportData.report.test_results) {
@@ -163,16 +163,33 @@ import {
                   // Find the corresponding test case to get highlight_elements
                   const testCase = data.test_cases?.find((tc: any) => tc.id === result.test_id);
                   if (testCase?.highlight_elements) {
-                    failedTestIds.push(...testCase.highlight_elements);
+                    failedElementIds.push(...testCase.highlight_elements);
+                  }
+
+                  // Also extract agent IDs from recommendations by matching file paths
+                  if (result.recommendations && agentData) {
+                    result.recommendations.forEach((rec: any) => {
+                      const filePath = rec.fix?.file_path;
+                      if (filePath) {
+                        // Try to find matching agent by file path
+                        const matchingAgent = agentData.agents.find(agent => 
+                          agent.file_path === filePath || 
+                          filePath.includes(agent.name.toLowerCase().replace(/\s+/g, '_'))
+                        );
+                        if (matchingAgent && !failedElementIds.includes(matchingAgent.id)) {
+                          failedElementIds.push(matchingAgent.id);
+                        }
+                      }
+                    });
                   }
                 }
               });
             }
             
             // Highlight failed/warning elements with error styling
-            if (failedTestIds.length > 0) {
+            if (failedElementIds.length > 0) {
               setTimeout(() => {
-                highlightErrorElements(failedTestIds);
+                highlightErrorElements(failedElementIds);
               }, 500); // Small delay after clearing
             }
           }

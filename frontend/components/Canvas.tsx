@@ -427,6 +427,17 @@ export function Canvas() {
             >
               <path d="M0,0 L0,6 L9,3 z" fill="#ef4444" />
             </marker>
+            <marker
+              id="arrowhead-blue"
+              markerWidth="10"
+              markerHeight="10"
+              refX="9"
+              refY="3"
+              orient="auto"
+              markerUnits="strokeWidth"
+            >
+              <path d="M0,0 L0,6 L9,3 z" fill="#3b82f6" />
+            </marker>
           </defs>
           
           {edges.map((edge) => {
@@ -441,11 +452,31 @@ export function Canvas() {
             // Use edge.color for test-target edges
             let color = isTestTarget && edge.color ? edge.color : (isAgentTool ? '#10b981' : '#ef4444');
             const strokeWidth = isAgentTool ? 3 : isTestTarget ? 2 : 4;
-            const markerId = isAgentTool ? 'arrowhead-green' : 'arrowhead-red';
             
             // Check if this edge should be highlighted
             const isEdgeHighlighted = edge.data && highlightedElements.has(edge.data.id);
             const isEdgeErrorHighlighted = edge.data && errorHighlightedElements.has(edge.data.id);
+            
+            // For test-target edges, also highlight if either endpoint is highlighted
+            const isTestEdgeHighlighted = isTestTarget && (
+              highlightedElements.has(edge.from.id) || // Test node highlighted
+              highlightedElements.has(edge.to.id) ||   // Target node highlighted
+              (edge.to.type !== 'test' && highlightedElements.has(edge.to.data.id)) // Target data ID
+            );
+            
+            const isTestEdgeErrorHighlighted = isTestTarget && (
+              errorHighlightedElements.has(edge.from.id) || 
+              errorHighlightedElements.has(edge.to.id) ||
+              (edge.to.type !== 'test' && errorHighlightedElements.has(edge.to.data.id))
+            );
+            
+            // Determine marker based on highlight state and edge type
+            let markerId = isAgentTool ? 'arrowhead-green' : 'arrowhead-red';
+            if (isEdgeErrorHighlighted || isTestEdgeErrorHighlighted) {
+              markerId = 'arrowhead-red';
+            } else if (isEdgeHighlighted || isTestEdgeHighlighted) {
+              markerId = 'arrowhead-blue';
+            }
 
             let path: string;
 
@@ -479,11 +510,11 @@ export function Canvas() {
             // Determine stroke color based on highlight state
             let strokeColor = color;
             let strokeWidth2 = strokeWidth;
-            if (isEdgeErrorHighlighted) {
+            if (isEdgeErrorHighlighted || isTestEdgeErrorHighlighted) {
               strokeColor = '#ef4444'; // Red for errors
               strokeWidth2 = strokeWidth + 3;
-            } else if (isEdgeHighlighted) {
-              strokeColor = '#fbbf24'; // Yellow for normal highlights
+            } else if (isEdgeHighlighted || isTestEdgeHighlighted) {
+              strokeColor = '#3b82f6'; // Blue for test edges, yellow for others
               strokeWidth2 = strokeWidth + 2;
             }
 
@@ -509,13 +540,13 @@ export function Canvas() {
                   fill="none"
                   markerEnd={`url(#${markerId})`}
                   className={`cursor-pointer pointer-events-none transition-all edge-path ${
-                    (isEdgeHighlighted || isEdgeErrorHighlighted) ? 'animate-pulse' : ''
+                    (isEdgeHighlighted || isEdgeErrorHighlighted || isTestEdgeHighlighted || isTestEdgeErrorHighlighted) ? 'animate-pulse' : ''
                   }`}
                   style={{
-                    filter: isEdgeErrorHighlighted
+                    filter: (isEdgeErrorHighlighted || isTestEdgeErrorHighlighted)
                       ? 'drop-shadow(0 0 12px rgba(239, 68, 68, 0.9))'
-                      : isEdgeHighlighted 
-                      ? 'drop-shadow(0 0 10px rgba(251, 191, 36, 0.8))'
+                      : (isEdgeHighlighted || isTestEdgeHighlighted)
+                      ? 'drop-shadow(0 0 10px rgba(59, 130, 246, 0.8))'
                       : 'drop-shadow(0 0 3px rgba(0,0,0,0.2))',
                   }}
                 />
@@ -763,8 +794,18 @@ function TestNode({ data, result, isRunning }: { data: TestCase; result: any; is
     return '❓';
   };
 
+  // Check if there are recommendations
+  const hasRecommendations = result?.recommendations && result.recommendations.length > 0;
+
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 relative">
+      {/* Recommendation badge */}
+      {hasRecommendations && (
+        <div className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 rounded-full flex items-center justify-center text-[10px] z-10">
+          💡
+        </div>
+      )}
+      
       <div className="flex items-center gap-2">
         <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
           {getCategoryIcon(data.category)}
