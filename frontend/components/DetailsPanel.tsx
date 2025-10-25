@@ -49,15 +49,31 @@ export function DetailsPanel() {
 
 function AgentDetails({ agent }: { agent: Agent }) {
   const [editing, setEditing] = useState(false);
+  const { agentData, addStatusMessage, testingStatus, testReport, errorHighlightedElements, addQueuedChange } = useStore();
   const [editedAgent, setEditedAgent] = useState(agent);
-  const { addStatusMessage } = useStore();
+
+  const isTestingActive = testingStatus === 'running_tests' || testingStatus === 'generating';
+  const hasErrors = errorHighlightedElements.has(agent.id);
+  
+  // Find errors related to this agent from test report
+  const agentErrors = testReport?.test_results?.filter((result: any) => {
+    const testCase = testReport.test_cases?.find((tc: any) => tc.id === result.test_id);
+    return (result.status === 'failed' || result.status === 'warning') && 
+           testCase?.highlight_elements?.includes(agent.id);
+  }) || [];
 
   const handleSave = async () => {
     try {
-      await apiService.updateAgent(agent.id, editedAgent);
+      // Queue the change instead of applying immediately
+      addQueuedChange({
+        type: 'edit',
+        description: `Update agent: ${agent.name}`,
+        data: { agentId: agent.id, updates: editedAgent },
+      });
+      
       addStatusMessage({
         type: 'success',
-        message: `Updated agent: ${agent.name}`,
+        message: `Queued update for agent: ${agent.name}`,
       });
       setEditing(false);
     } catch (error: any) {
@@ -70,16 +86,52 @@ function AgentDetails({ agent }: { agent: Agent }) {
 
   return (
     <div className="p-4 space-y-4">
+      {/* Error Banner */}
+      {hasErrors && agentErrors.length > 0 && (
+        <div className="p-3 rounded-lg border-2 border-red-500/50 bg-red-500/10">
+          <h5 className="font-semibold text-red-700 dark:text-red-300 mb-2 flex items-center gap-2">
+            ⚠️ Test Failures Detected
+          </h5>
+          <div className="space-y-2">
+            {agentErrors.map((error: any, idx: number) => (
+              <div key={idx} className="text-sm p-2 bg-background/50 rounded">
+                <p className="font-medium">{error.results?.summary}</p>
+                {error.results?.issues_found && error.results.issues_found.length > 0 && (
+                  <ul className="mt-1 list-disc list-inside text-xs text-muted-foreground">
+                    {error.results.issues_found.map((issue: string, i: number) => (
+                      <li key={i}>{issue}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      
       <div className="flex items-center justify-between">
         <h4 className="font-semibold text-lg">{agent.name}</h4>
         <button
           onClick={() => (editing ? handleSave() : setEditing(true))}
-          className="px-3 py-1 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-sm flex items-center gap-2"
+          disabled={isTestingActive}
+          className={`px-3 py-1 rounded-md text-sm flex items-center gap-2 ${
+            isTestingActive 
+              ? 'bg-muted text-muted-foreground cursor-not-allowed' 
+              : 'bg-primary text-primary-foreground hover:bg-primary/90'
+          }`}
         >
           <Save className="w-4 h-4" />
           {editing ? 'Save' : 'Edit'}
         </button>
       </div>
+      
+      {isTestingActive && (
+        <div className="p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+          <p className="text-xs text-yellow-700 dark:text-yellow-300">
+            🔒 Editing disabled during testing
+          </p>
+        </div>
+      )}
 
       <DetailSection label="Type" value={agent.type} />
       <DetailSection label="File Path" value={agent.file_path} />
@@ -92,7 +144,8 @@ function AgentDetails({ agent }: { agent: Agent }) {
             onChange={(e) =>
               setEditedAgent({ ...editedAgent, prompt: e.target.value })
             }
-            className="w-full mt-1 p-2 border border-border rounded-md bg-background text-sm"
+            disabled={isTestingActive}
+            className="w-full mt-1 p-2 border border-border rounded-md bg-background text-sm disabled:opacity-50"
             rows={4}
           />
         ) : (
@@ -108,7 +161,8 @@ function AgentDetails({ agent }: { agent: Agent }) {
             onChange={(e) =>
               setEditedAgent({ ...editedAgent, system_instruction: e.target.value })
             }
-            className="w-full mt-1 p-2 border border-border rounded-md bg-background text-sm"
+            disabled={isTestingActive}
+            className="w-full mt-1 p-2 border border-border rounded-md bg-background text-sm disabled:opacity-50"
             rows={4}
           />
         ) : (
@@ -141,7 +195,8 @@ function AgentDetails({ agent }: { agent: Agent }) {
                     },
                   })
                 }
-                className="w-20 px-2 py-0.5 border border-border rounded bg-background"
+                disabled={isTestingActive}
+                className="w-20 px-2 py-0.5 border border-border rounded bg-background disabled:opacity-50"
               />
             ) : (
               <span>{agent.model_config.temperature}</span>
@@ -157,6 +212,14 @@ function AgentDetails({ agent }: { agent: Agent }) {
                   setEditedAgent({
                     ...editedAgent,
                     model_config: {
+                      ...editedAgent.model_config,
+                      max_tokens: parseInt(e.target.value),
+                    },
+                  })
+                }
+                disabled={isTestingActive}
+                className="w-20 px-2 py-0.5 border border-border rounded bg-background disabled:opacity-50"
+              />
                       ...editedAgent.model_config,
                       max_tokens: parseInt(e.target.value),
                     },

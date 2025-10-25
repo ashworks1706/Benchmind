@@ -8,6 +8,7 @@ import { StatusPanel } from './StatusPanel';
 import { DetailsPanel } from './DetailsPanel';
 import TestingPanel from './TestingPanel';
 import TestReportPanel from './TestReportPanel';
+import ChangeQueuePanel from './ChangeQueuePanel';
 import { Loader2, Database, Trash2, Activity, Beaker } from 'lucide-react';
 
 export function Dashboard() {
@@ -400,6 +401,9 @@ export function Dashboard() {
           {rightPanelView === 'report' && <TestReportPanel />}
         </div>
       </div>
+      
+      {/* Change Queue Panel - Bottom Left */}
+      <ChangeQueuePanel />
     </div>
   );
 }

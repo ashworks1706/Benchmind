@@ -21,8 +21,7 @@ import { apiService } from '@/lib/api';
 import { Fix } from '@/types';
 
 export default function TestReportPanel() {
-  const { testReport, setPanelView, addStatusMessage, agentData } = useStore();
-  const [applyingFix, setApplyingFix] = useState<string | null>(null);
+  const { testReport, setPanelView, addStatusMessage, agentData, addQueuedChange } = useStore();
 
   const handleBackToTests = () => {
     setPanelView('testing');
@@ -40,26 +39,22 @@ export default function TestReportPanel() {
     if (!agentData) return;
 
     try {
-      setApplyingFix(recommendation.fix.file_path);
-      
-      addStatusMessage({
-        type: 'info',
-        message: `🔧 Applying fix to ${recommendation.fix.file_path}...`,
+      // Queue the fix instead of applying immediately
+      addQueuedChange({
+        type: 'fix',
+        description: `Fix: ${recommendation.issue} in ${recommendation.fix.file_path}`,
+        data: { recommendation, agentData },
       });
-
-      await apiService.applyFix(recommendation, agentData);
 
       addStatusMessage({
         type: 'success',
-        message: `✅ Fix applied successfully to ${recommendation.fix.file_path}`,
+        message: `✅ Fix queued: ${recommendation.issue}`,
       });
     } catch (error: any) {
       addStatusMessage({
         type: 'error',
-        message: `❌ Failed to apply fix: ${error.message}`,
+        message: `❌ Failed to queue fix: ${error.message}`,
       });
-    } finally {
-      setApplyingFix(null);
     }
   };
 
@@ -382,13 +377,8 @@ export default function TestReportPanel() {
                         <Button
                           size="sm"
                           onClick={() => handleApplyFix(issue)}
-                          disabled={applyingFix !== null}
                         >
-                          {applyingFix === issue.fix.file_path ? (
-                            <>Applying...</>
-                          ) : (
-                            <>🔧 Apply Fix</>
-                          )}
+                          ➕ Queue Fix
                         </Button>
                       </div>
                     )}
@@ -474,14 +464,9 @@ export default function TestReportPanel() {
                                 size="sm"
                                 variant="outline"
                                 onClick={() => handleApplyFix(rec)}
-                                disabled={applyingFix !== null}
                                 className="w-full"
                               >
-                                {applyingFix === rec.fix.file_path ? (
-                                  <>⏳ Applying Fix...</>
-                                ) : (
-                                  <>🔧 Apply This Fix</>
-                                )}
+                                ➕ Queue This Fix
                               </Button>
                             </div>
                           )}

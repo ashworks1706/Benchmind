@@ -71,6 +71,11 @@ interface AppState {
   setTestReport: (report: any) => void;
   setPendingTestCases: (cases: TestCase[] | ((prev: TestCase[]) => TestCase[])) => void;
   
+  // Change Queue Actions
+  addQueuedChange: (change: Omit<AppState['queuedChanges'][0], 'id' | 'timestamp'>) => void;
+  removeQueuedChange: (id: string) => void;
+  clearQueuedChanges: () => void;
+  
   loadFromLocalStorage: () => void;
   clearLocalStorage: () => void;
   reset: () => void;
@@ -102,6 +107,9 @@ export const useStore = create<AppState>((set) => ({
   errorHighlightedElements: new Set(),
   isTestingInProgress: false,
   currentTestIndex: -1,
+  
+  // Change Queue
+  queuedChanges: [],
 
   // Actions
   setAgentData: (data, repoUrl?: string, fromCache = false) => {
@@ -196,6 +204,26 @@ export const useStore = create<AppState>((set) => ({
   setPendingTestCases: (cases) => set((state) => ({
     pendingTestCases: typeof cases === 'function' ? cases(state.pendingTestCases || []) : cases
   })),
+  
+  // Change Queue Actions
+  addQueuedChange: (change) =>
+    set((state) => ({
+      queuedChanges: [
+        ...state.queuedChanges,
+        {
+          ...change,
+          id: `change-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          timestamp: Date.now(),
+        },
+      ],
+    })),
+  
+  removeQueuedChange: (id) =>
+    set((state) => ({
+      queuedChanges: state.queuedChanges.filter((c) => c.id !== id),
+    })),
+  
+  clearQueuedChanges: () => set({ queuedChanges: [] }),
   
   loadFromLocalStorage: () => {
     if (typeof window !== 'undefined') {
