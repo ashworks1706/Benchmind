@@ -11,7 +11,7 @@ interface CanvasNode {
   y: number;
   width: number;
   height: number;
-  data: Agent | Tool;
+  data: Agent | Tool | (Tool & { parentAgentId?: string });
 }
 
 interface CanvasEdge {
@@ -74,7 +74,7 @@ export function Canvas() {
           y: 100 + toolOffsetY,
           width: 130,
           height: 80,
-          data: tool,
+          data: { ...tool, parentAgentId: agent.id }, // Store parent agent ID
         };
         newNodes.push(toolNode);
         nodeMap.set(toolNodeId, toolNode);
@@ -107,7 +107,7 @@ export function Canvas() {
       });
     });
 
-    // Agent to agent edges
+    // Agent to agent edges with relationship data
     agentData.relationships.forEach((rel) => {
       const fromNode = nodeMap.get(rel.from_agent_id);
       const toNode = nodeMap.get(rel.to_agent_id);
@@ -117,14 +117,33 @@ export function Canvas() {
           type: 'agent-agent',
           from: fromNode,
           to: toNode,
-          data: rel,
+          data: rel, // Include full relationship data
         });
       }
     });
 
     setNodes(newNodes);
     setEdges(newEdges);
-  }, [agentData, highlightedElements]);
+  }, [agentData]);
+
+  // Update edge references when nodes move
+  useEffect(() => {
+    if (nodes.length === 0 || edges.length === 0) return;
+    
+    setEdges(prevEdges => prevEdges.map(edge => {
+      const updatedFrom = nodes.find(n => n.id === edge.from.id);
+      const updatedTo = nodes.find(n => n.id === edge.to.id);
+      
+      if (updatedFrom && updatedTo) {
+        return {
+          ...edge,
+          from: updatedFrom,
+          to: updatedTo,
+        };
+      }
+      return edge;
+    }));
+  }, [nodes]);
 
   // Pan handlers
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -134,30 +153,35 @@ export function Canvas() {
     }
   }, [transform]);
 
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (draggedNode) {
-      // Node dragging
+    const handleMouseMove = (e: React.MouseEvent) => {
+    if (draggedNode && nodeDragStart) {
+      e.preventDefault();
       const deltaX = (e.clientX - nodeDragStart.x) / transform.scale;
       const deltaY = (e.clientY - nodeDragStart.y) / transform.scale;
       
-      setNodes(prevNodes =>
-        prevNodes.map(node =>
-          node.id === draggedNode.id
-            ? { ...node, x: node.x + deltaX, y: node.y + deltaY }
-            : node
-        )
-      );
+      setNodes(prevNodes => prevNodes.map(node => {
+        // Move the dragged node
+        if (node.id === draggedNode.id) {
+          return { ...node, x: node.x + deltaX, y: node.y + deltaY };
+        }
+        // If dragged node is an agent, also move all its tool children
+        if (draggedNode.type === 'agent' && node.type === 'tool') {
+          const toolData = node.data as Tool & { parentAgentId?: string };
+          if (toolData.parentAgentId === draggedNode.id) {
+            return { ...node, x: node.x + deltaX, y: node.y + deltaY };
+          }
+        }
+        return node;
+      }));
       
       setNodeDragStart({ x: e.clientX, y: e.clientY });
-    } else if (isDragging) {
-      // Canvas panning
-      setTransform(prev => ({
-        ...prev,
-        x: e.clientX - dragStart.x,
-        y: e.clientY - dragStart.y,
-      }));
+    } else if (isDragging && dragStart) {
+      const dx = e.clientX - dragStart.x;
+      const dy = e.clientY - dragStart.y;
+      setTransform(prev => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
+      setDragStart({ x: e.clientX, y: e.clientY });
     }
-  }, [isDragging, dragStart, draggedNode, nodeDragStart, transform.scale]);
+  };
 
   const handleMouseUp = useCallback(() => {
     setIsDragging(false);
@@ -275,6 +299,11 @@ export function Canvas() {
       onMouseLeave={handleMouseUp}
       onWheel={handleWheel}
     >
+      <style>{`
+        .edge-group:hover .edge-path {
+          filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.5)) !important;
+        }
+      `}</style>
       {/* Grid background */}
       <div className="canvas-background absolute inset-0" style={{
         backgroundImage: 'radial-gradient(circle, #333 1px, transparent 1px)',
@@ -350,14 +379,14 @@ export function Canvas() {
             }
 
             return (
-              <g key={edge.id}>
+              <g key={edge.id} className="edge-group">
                 {/* Invisible wider path for easier clicking */}
                 <path
                   d={path}
                   stroke="transparent"
                   strokeWidth={strokeWidth + 10}
                   fill="none"
-                  className="cursor-pointer pointer-events-auto"
+                  className="cursor-pointer pointer-events-auto transition-all hover:stroke-gray-400/30"
                   onClick={(e) => {
                     e.stopPropagation();
                     handleEdgeClick(edge);
@@ -370,7 +399,10 @@ export function Canvas() {
                   strokeWidth={strokeWidth}
                   fill="none"
                   markerEnd={`url(#${markerId})`}
-                  className="cursor-pointer pointer-events-none hover:opacity-80 transition-opacity"
+                  className="cursor-pointer pointer-events-none transition-all edge-path"
+                  style={{
+                    filter: 'drop-shadow(0 0 3px rgba(0,0,0,0.2))',
+                  }}
                 />
                 {edge.data && (
                   <text
