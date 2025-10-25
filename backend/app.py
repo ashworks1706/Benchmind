@@ -327,6 +327,213 @@ def update_agent():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# Store testing sessions
+testing_sessions = {}
+testing_progress = {}
+
+@app.route('/api/testing/start', methods=['POST'])
+def start_testing_session():
+    """
+    Start a new testing session with progress tracking
+    Expected payload: { "agent_data": {...} }
+    """
+    try:
+        data = request.json
+        agent_data = data.get('agent_data')
+        
+        if not agent_data:
+            return jsonify({'error': 'Agent data is required'}), 400
+        
+        # Create testing session
+        session_id = str(uuid.uuid4())
+        testing_sessions[session_id] = {
+            'agent_data': agent_data,
+            'test_cases': [],
+            'test_results': [],
+            'status': 'generating',
+            'progress': []
+        }
+        
+        # Generate test cases in background with progress updates
+        def generate_with_progress():
+            def progress_callback(event_type, data):
+                if session_id not in testing_progress:
+                    testing_progress[session_id] = []
+                testing_progress[session_id].append({
+                    'type': event_type,
+                    'data': data,
+                    'timestamp': time.time()
+                })
+                
+                # Store test cases as they're generated
+                if event_type == 'test_case_generated':
+                    test_case = data.get('test_case')
+                    if test_case:
+                        testing_sessions[session_id]['test_cases'].append(test_case)
+            
+            test_cases = test_generator.generate_test_cases(agent_data, progress_callback)
+            testing_sessions[session_id]['test_cases'] = test_cases
+            testing_sessions[session_id]['status'] = 'ready_for_confirmation'
+        
+        thread = Thread(target=generate_with_progress)
+        thread.start()
+        
+        return jsonify({
+            'status': 'success',
+            'session_id': session_id
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/testing/progress/<session_id>', methods=['GET'])
+def get_testing_progress(session_id):
+    """Get progress updates for a testing session"""
+    try:
+        if session_id not in testing_sessions:
+            return jsonify({'error': 'Session not found'}), 404
+        
+        session = testing_sessions[session_id]
+        progress = testing_progress.get(session_id, [])
+        
+        return jsonify({
+            'status': session['status'],
+            'test_cases': session['test_cases'],
+            'progress': progress,
+            'test_results': session.get('test_results', [])
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/testing/update-tests', methods=['POST'])
+def update_test_cases():
+    """
+    Update test cases based on user feedback
+    Expected payload: { "session_id": "...", "feedback": "..." }
+    """
+    try:
+        data = request.json
+        session_id = data.get('session_id')
+        feedback = data.get('feedback')
+        
+        if not session_id or not feedback:
+            return jsonify({'error': 'Session ID and feedback are required'}), 400
+        
+        if session_id not in testing_sessions:
+            return jsonify({'error': 'Session not found'}), 404
+        
+        session = testing_sessions[session_id]
+        current_tests = session['test_cases']
+        agent_data = session['agent_data']
+        
+        # Clear previous progress
+        testing_progress[session_id] = []
+        
+        def progress_callback(event_type, data):
+            if session_id not in testing_progress:
+                testing_progress[session_id] = []
+            testing_progress[session_id].append({
+                'type': event_type,
+                'data': data,
+                'timestamp': time.time()
+            })
+        
+        updated_tests = test_generator.update_test_cases(
+            current_tests,
+            feedback,
+            agent_data,
+            progress_callback
+        )
+        
+        testing_sessions[session_id]['test_cases'] = updated_tests
+        
+        return jsonify({
+            'status': 'success',
+            'test_cases': updated_tests
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/testing/confirm', methods=['POST'])
+def confirm_tests():
+    """
+    User confirms test cases and starts execution
+    Expected payload: { "session_id": "..." }
+    """
+    try:
+        data = request.json
+        session_id = data.get('session_id')
+        
+        if not session_id:
+            return jsonify({'error': 'Session ID is required'}), 400
+        
+        if session_id not in testing_sessions:
+            return jsonify({'error': 'Session not found'}), 404
+        
+        testing_sessions[session_id]['status'] = 'running_tests'
+        
+        # Run tests in background
+        def run_tests():
+            session = testing_sessions[session_id]
+            test_cases = session['test_cases']
+            agent_data = session['agent_data']
+            results = []
+            
+            # Clear progress
+            testing_progress[session_id] = []
+            
+            def progress_callback(event_type, data):
+                if session_id not in testing_progress:
+                    testing_progress[session_id] = []
+                testing_progress[session_id].append({
+                    'type': event_type,
+                    'data': data,
+                    'timestamp': time.time()
+                })
+            
+            for test_case in test_cases:
+                result = test_generator.run_test(test_case, agent_data, progress_callback)
+                results.append(result)
+                testing_sessions[session_id]['test_results'] = results
+            
+            # Generate report
+            report = test_generator.generate_test_report(results, agent_data)
+            testing_sessions[session_id]['report'] = report
+            testing_sessions[session_id]['status'] = 'completed'
+        
+        thread = Thread(target=run_tests)
+        thread.start()
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Tests started'
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/testing/report/<session_id>', methods=['GET'])
+def get_test_report(session_id):
+    """Get comprehensive test report with graphs"""
+    try:
+        if session_id not in testing_sessions:
+            return jsonify({'error': 'Session not found'}), 404
+        
+        session = testing_sessions[session_id]
+        
+        if 'report' not in session:
+            return jsonify({'error': 'Report not ready yet'}), 404
+        
+        return jsonify({
+            'status': 'success',
+            'report': session['report']
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/cache/list', methods=['GET'])
 def list_cached_repos():
     """

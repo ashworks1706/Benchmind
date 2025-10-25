@@ -349,6 +349,9 @@ export function Canvas() {
             const color = isAgentTool ? '#10b981' : '#ef4444';
             const strokeWidth = isAgentTool ? 3 : 4;
             const markerId = isAgentTool ? 'arrowhead-green' : 'arrowhead-red';
+            
+            // Check if this edge should be highlighted
+            const isEdgeHighlighted = edge.data && highlightedElements.has(edge.data.id);
 
             let path: string;
 
@@ -384,16 +387,20 @@ export function Canvas() {
                     handleEdgeClick(edge);
                   }}
                 />
-                {/* Visible path */}
+                {/* Visible path with highlight animation */}
                 <path
                   d={path}
-                  stroke={color}
-                  strokeWidth={strokeWidth}
+                  stroke={isEdgeHighlighted ? '#fbbf24' : color}
+                  strokeWidth={isEdgeHighlighted ? strokeWidth + 2 : strokeWidth}
                   fill="none"
                   markerEnd={`url(#${markerId})`}
-                  className="cursor-pointer pointer-events-none transition-all edge-path"
+                  className={`cursor-pointer pointer-events-none transition-all edge-path ${
+                    isEdgeHighlighted ? 'animate-pulse' : ''
+                  }`}
                   style={{
-                    filter: 'drop-shadow(0 0 3px rgba(0,0,0,0.2))',
+                    filter: isEdgeHighlighted 
+                      ? 'drop-shadow(0 0 10px rgba(251, 191, 36, 0.8))'
+                      : 'drop-shadow(0 0 3px rgba(0,0,0,0.2))',
                   }}
                 />
                 {edge.data && (

@@ -6,10 +6,13 @@ import { apiService } from '@/lib/api';
 import { Canvas } from './Canvas';
 import { StatusPanel } from './StatusPanel';
 import { DetailsPanel } from './DetailsPanel';
-import { Loader2, Database, Trash2 } from 'lucide-react';
+import TestingPanel from './TestingPanel';
+import TestReportPanel from './TestReportPanel';
+import { Loader2, Database, Trash2, Activity, Beaker } from 'lucide-react';
 
 export function Dashboard() {
   const [githubUrl, setGithubUrl] = useState('');
+  const [rightPanelView, setRightPanelView] = useState<'status' | 'testing' | 'report'>('status');
   const { 
     agentData, 
     isLoading, 
@@ -23,6 +26,7 @@ export function Dashboard() {
     fromCache,
     loadFromLocalStorage,
     reset,
+    setPanelView,
   } = useStore();
 
   // Load from localStorage on mount
@@ -47,6 +51,15 @@ export function Dashboard() {
       resumeAnalysis(savedAnalysisId, savedGithubUrl);
     }
   }, [loadFromLocalStorage]);
+
+  // Watch for panelView changes from store (e.g., from TestingPanel)
+  useEffect(() => {
+    if (panelView === 'testing') {
+      setRightPanelView('testing');
+    } else if (panelView === 'testing-report') {
+      setRightPanelView('report');
+    }
+  }, [panelView]);
 
   const handleClearCache = async () => {
     try {
@@ -351,9 +364,41 @@ export function Dashboard() {
         )}
       </div>
 
-      {/* Right Panel - Status Only */}
-      <div className="flex-1 border-l border-border bg-background overflow-hidden">
-        <StatusPanel />
+      {/* Right Panel - Status or Testing */}
+      <div className="flex-1 border-l border-border bg-background overflow-hidden flex flex-col">
+        {/* Tab Switcher */}
+        <div className="flex border-b border-border bg-muted/50">
+          <button
+            onClick={() => setRightPanelView('status')}
+            className={`flex-1 px-4 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+              rightPanelView === 'status'
+                ? 'bg-background text-foreground border-b-2 border-primary'
+                : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+            }`}
+          >
+            <Activity className="w-4 h-4" />
+            Status & Progress
+          </button>
+          <button
+            onClick={() => setRightPanelView('testing')}
+            className={`flex-1 px-4 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+              rightPanelView === 'testing'
+                ? 'bg-background text-foreground border-b-2 border-primary'
+                : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+            }`}
+            disabled={!agentData}
+          >
+            <Beaker className="w-4 h-4" />
+            Testing Suite
+          </button>
+        </div>
+
+        {/* Panel Content */}
+        <div className="flex-1 overflow-hidden">
+          {rightPanelView === 'status' && <StatusPanel />}
+          {rightPanelView === 'testing' && <TestingPanel />}
+          {rightPanelView === 'report' && <TestReportPanel />}
+        </div>
       </div>
     </div>
   );

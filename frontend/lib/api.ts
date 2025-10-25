@@ -105,4 +105,42 @@ export const apiService = {
     const response = await api.post('/api/cache/clear');
     return response.data;
   },
+
+  // Testing workflow APIs
+  startTestingSession: async (agentData: AgentData): Promise<{ session_id: string }> => {
+    const response = await api.post('/api/testing/start', {
+      agent_data: agentData,
+    });
+    return response.data;
+  },
+
+  getTestingProgress: async (sessionId: string): Promise<{
+    status: string;
+    test_cases: TestCase[];
+    progress: any[];
+    test_results: TestResult[];
+  }> => {
+    const response = await api.get(`/api/testing/progress/${sessionId}`);
+    return response.data;
+  },
+
+  updateTestCases: async (sessionId: string, feedback: string): Promise<{ test_cases: TestCase[] }> => {
+    const response = await api.post('/api/testing/update-tests', {
+      session_id: sessionId,
+      feedback,
+    });
+    return response.data;
+  },
+
+  confirmTests: async (sessionId: string): Promise<{ status: string; message: string }> => {
+    const response = await api.post('/api/testing/confirm', {
+      session_id: sessionId,
+    });
+    return response.data;
+  },
+
+  getTestReport: async (sessionId: string): Promise<{ report: any }> => {
+    const response = await api.get(`/api/testing/report/${sessionId}`);
+    return response.data;
+  },
 };

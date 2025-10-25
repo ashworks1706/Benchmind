@@ -18,6 +18,13 @@ interface AppState {
   analysisSteps: any[];
   fromCache: boolean;
   
+  // Testing Session
+  testingSessionId: string | null;
+  testingStatus: 'idle' | 'generating' | 'ready_for_confirmation' | 'running_tests' | 'completed';
+  testingProgress: any[];
+  testReport: any | null;
+  pendingTestCases: TestCase[];
+  
   // UI State
   isLoading: boolean;
   loadingMessage: string;
@@ -43,6 +50,15 @@ interface AppState {
   stopTesting: () => void;
   setCurrentTestIndex: (index: number) => void;
   setAnalysisSteps: (steps: any[] | ((prev: any[]) => any[])) => void;
+  
+  // Testing Session Actions
+  setTestingSessionId: (id: string | null) => void;
+  setTestingStatus: (status: 'idle' | 'generating' | 'ready_for_confirmation' | 'running_tests' | 'completed') => void;
+  addTestingProgress: (progress: any) => void;
+  clearTestingProgress: () => void;
+  setTestReport: (report: any) => void;
+  setPendingTestCases: (cases: TestCase[]) => void;
+  
   loadFromLocalStorage: () => void;
   clearLocalStorage: () => void;
   reset: () => void;
@@ -57,6 +73,14 @@ export const useStore = create<AppState>((set) => ({
   testResults: new Map(),
   analysisSteps: [],
   fromCache: false,
+  
+  // Testing Session
+  testingSessionId: null,
+  testingStatus: 'idle',
+  testingProgress: [],
+  testReport: null,
+  pendingTestCases: [],
+  
   isLoading: false,
   loadingMessage: '',
   statusMessages: [],
@@ -136,6 +160,22 @@ export const useStore = create<AppState>((set) => ({
     set((state) => ({
       analysisSteps: typeof steps === 'function' ? steps(state.analysisSteps) : steps
     })),
+  
+  // Testing Session Actions
+  setTestingSessionId: (id) => set({ testingSessionId: id }),
+  
+  setTestingStatus: (status) => set({ testingStatus: status }),
+  
+  addTestingProgress: (progress) =>
+    set((state) => ({
+      testingProgress: [...state.testingProgress, progress]
+    })),
+  
+  clearTestingProgress: () => set({ testingProgress: [] }),
+  
+  setTestReport: (report) => set({ testReport: report }),
+  
+  setPendingTestCases: (cases) => set({ pendingTestCases: cases }),
   
   loadFromLocalStorage: () => {
     if (typeof window !== 'undefined') {

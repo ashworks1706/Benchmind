@@ -53,6 +53,15 @@ export interface AgentData {
 }
 
 // Types for Test Cases
+export interface TestMetric {
+  name: string;
+  unit: string;
+  benchmark: number;
+  description: string;
+  value?: number;
+  passed?: boolean;
+}
+
 export interface TestCase {
   id: string;
   name: string;
@@ -60,8 +69,10 @@ export interface TestCase {
     | 'hyperparameter'
     | 'prompt_injection'
     | 'tool_calling'
+    | 'reasoning'
     | 'relationship'
     | 'collaborative'
+    | 'connection'
     | 'error_handling'
     | 'output_quality'
     | 'performance'
@@ -77,6 +88,8 @@ export interface TestCase {
   expected_behavior: string;
   success_criteria: string;
   highlight_elements: string[];
+  metrics?: TestMetric[];
+  estimated_duration?: number;
 }
 
 export interface TestResult {
@@ -87,18 +100,17 @@ export interface TestResult {
     summary: string;
     details: string;
     issues_found: string[];
-    metrics: {
-      accuracy?: number;
-      performance?: string;
-      security_score?: number;
-    };
+    logs?: string[];
   };
+  metrics?: TestMetric[];
   recommendations: Fix[];
 }
 
 export interface Fix {
   severity: 'critical' | 'high' | 'medium' | 'low';
+  category?: string;
   issue: string;
+  impact?: string;
   fix: {
     file_path: string;
     line_number: number;
@@ -131,8 +143,8 @@ export interface StatusMessage {
   timestamp: Date;
 }
 
-export type PanelView = 'status' | 'details' | 'both';
+export type PanelView = 'status' | 'details' | 'both' | 'testing' | 'testing-report';
 export type SelectedElement = {
-  type: 'agent' | 'tool' | 'relationship';
-  data: Agent | Tool | Relationship;
+  type: 'agent' | 'tool' | 'relationship' | 'edge';
+  data: Agent | Tool | Relationship | any;
 } | null;
