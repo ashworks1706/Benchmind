@@ -330,19 +330,49 @@ def update_agent():
 # Store testing sessions
 testing_sessions = {}
 testing_progress = {}
+testing_cache = {}  # Cache for test sessions by repo URL
 
 @app.route('/api/testing/start', methods=['POST'])
 def start_testing_session():
     """
     Start a new testing session with progress tracking
-    Expected payload: { "agent_data": {...} }
+    Expected payload: { "agent_data": {...}, "repo_url": "..." }
     """
     try:
         data = request.json
         agent_data = data.get('agent_data')
+        repo_url = data.get('repo_url', '')
         
         if not agent_data:
             return jsonify({'error': 'Agent data is required'}), 400
+        
+        # Check cache first
+        cache_key = f"testing_{repo_url}" if repo_url else None
+        if cache_key and cache_key in testing_cache:
+            cached_session = testing_cache[cache_key]
+            # Create new session with cached test cases
+            session_id = str(uuid.uuid4())
+            testing_sessions[session_id] = {
+                'agent_data': agent_data,
+                'test_cases': cached_session['test_cases'],
+                'test_results': [],
+                'status': 'ready_for_confirmation',
+                'progress': [],
+                'from_cache': True
+            }
+            testing_progress[session_id] = [{
+                'type': 'status',
+                'data': {
+                    'message': '⚡ Loaded test cases from cache!',
+                    'progress': 100
+                },
+                'timestamp': time.time()
+            }]
+            return jsonify({
+                'session_id': session_id,
+                'from_cache': True,
+                'message': 'Test session loaded from cache'
+            }), 200
         
         # Create testing session
         session_id = str(uuid.uuid4())
@@ -351,7 +381,8 @@ def start_testing_session():
             'test_cases': [],
             'test_results': [],
             'status': 'generating',
-            'progress': []
+            'progress': [],
+            'from_cache': False
         }
         
         # Generate test cases in background with progress updates
@@ -374,6 +405,13 @@ def start_testing_session():
             test_cases = test_generator.generate_test_cases(agent_data, progress_callback)
             testing_sessions[session_id]['test_cases'] = test_cases
             testing_sessions[session_id]['status'] = 'ready_for_confirmation'
+            
+            # Cache the test cases
+            if cache_key:
+                testing_cache[cache_key] = {
+                    'test_cases': test_cases,
+                    'timestamp': time.time()
+                }
         
         thread = Thread(target=generate_with_progress)
         thread.start()

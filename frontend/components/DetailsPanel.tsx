@@ -220,13 +220,6 @@ function AgentDetails({ agent }: { agent: Agent }) {
                 disabled={isTestingActive}
                 className="w-20 px-2 py-0.5 border border-border rounded bg-background disabled:opacity-50"
               />
-                      ...editedAgent.model_config,
-                      max_tokens: parseInt(e.target.value),
-                    },
-                  })
-                }
-                className="w-20 px-2 py-0.5 border border-border rounded bg-background"
-              />
             ) : (
               <span>{agent.model_config.max_tokens}</span>
             )}

@@ -26,6 +26,7 @@ import {
     testingProgress,
     pendingTestCases,
     testReport,
+    currentRepoUrl,
     setTestingSessionId,
     setTestingStatus,
     addTestingProgress,
@@ -55,15 +56,24 @@ import {
         message: '🧪 Starting test generation...',
       });
 
-      const { session_id } = await apiService.startTestingSession(agentData);
-      setTestingSessionId(session_id);
-      setTestingStatus('generating');
-      setIsPolling(true);
-
-      addStatusMessage({
-        type: 'success',
-        message: 'Test generation session started!',
-      });
+      const response = await apiService.startTestingSession(agentData, currentRepoUrl || undefined);
+      setTestingSessionId(response.session_id);
+      
+      if (response.from_cache) {
+        setTestingStatus('ready_for_confirmation');
+        addStatusMessage({
+          type: 'success',
+          message: '⚡ Test cases loaded from cache! Ready to run.',
+        });
+        setIsPolling(true); // Still poll to get the cached test cases
+      } else {
+        setTestingStatus('generating');
+        setIsPolling(true);
+        addStatusMessage({
+          type: 'success',
+          message: 'Test generation session started!',
+        });
+      }
     } catch (error: any) {
       addStatusMessage({
         type: 'error',
