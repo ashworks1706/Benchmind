@@ -515,15 +515,16 @@ export function Canvas() {
     let edgeCount = 0;
 
     connectedEdges.forEach(edge => {
-      const edgeCost = calculateConnectionCost(
-        edge.from.data,
-        edge.to.data,
-        costMultipliers
-      );
-      if (edgeCost) {
+      // Calculate cost for edge if it has relationship data
+      if (edge.data) {
+        const edgeCost = calculateConnectionCost(
+          edge.data,
+          10,
+          costMultipliers
+        );
         totalCost += edgeCost.totalCost;
-        totalLatency += edgeCost.latency.p50;
-        avgSuccessRate += edgeCost.successRate;
+        totalLatency += edgeCost.p50_latency_ms || 0;
+        avgSuccessRate += edgeCost.success_rate || 0;
         edgeCount++;
       }
     });
@@ -1087,11 +1088,11 @@ export function Canvas() {
           animation: fadeOut 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
         }
       `}</style>
-      {/* Grid background */}
+      {/* Dot pattern background */}
       <div className="canvas-background absolute inset-0" style={{
-        backgroundImage: 'radial-gradient(circle, #333 1px, transparent 1px)',
-        backgroundSize: '20px 20px',
-        opacity: 0.3,
+        backgroundImage: 'radial-gradient(circle, rgba(100, 100, 100, 0.4) 1px, transparent 1px)',
+        backgroundSize: '24px 24px',
+        opacity: 0.5,
       }} />
 
       {/* Canvas content */}

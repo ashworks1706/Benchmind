@@ -35,6 +35,8 @@ const COLLECTION_LABELS: Record<string, string> = {
   docs: 'Documentation',
   code_context: 'Code',
   relationships: 'Relationship',
+  projects: 'Project',
+  test_sessions: 'Test Session',
 };
 
 const TYPE_COLORS: Record<string, string> = {
@@ -44,6 +46,8 @@ const TYPE_COLORS: Record<string, string> = {
   docs: 'bg-orange-500/10 text-orange-500',
   code_context: 'bg-gray-500/10 text-gray-500',
   relationships: 'bg-pink-500/10 text-pink-500',
+  projects: 'bg-indigo-500/10 text-indigo-500',
+  test_sessions: 'bg-emerald-500/10 text-emerald-500',
 };
 
 export function SpotlightSearch({ projectId }: SpotlightSearchProps) {
@@ -52,6 +56,7 @@ export function SpotlightSearch({ projectId }: SpotlightSearchProps) {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [searchMode, setSearchMode] = useState<'hybrid' | 'rag' | 'sql'>('hybrid');
   const inputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -97,6 +102,7 @@ export function SpotlightSearch({ projectId }: SpotlightSearchProps) {
             query: query.trim(),
             project_id: projectId,
             limit: 20,
+            mode: searchMode,  // 'hybrid', 'rag', or 'sql'
           }),
         });
 
@@ -113,7 +119,7 @@ export function SpotlightSearch({ projectId }: SpotlightSearchProps) {
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [query, projectId]);
+  }, [query, projectId, searchMode]);
 
   // Handle keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -191,6 +197,44 @@ export function SpotlightSearch({ projectId }: SpotlightSearchProps) {
               className="flex-1 bg-transparent text-white placeholder-gray-500 outline-none"
             />
             {isLoading && <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />}
+            
+            {/* Search Mode Toggle */}
+            <div className="flex items-center gap-1 px-2 py-1 bg-gray-800 rounded text-xs">
+              <button
+                onClick={() => setSearchMode('hybrid')}
+                className={`px-2 py-0.5 rounded transition-colors ${
+                  searchMode === 'hybrid' 
+                    ? 'bg-blue-500 text-white' 
+                    : 'text-gray-400 hover:text-white'
+                }`}
+                title="Hybrid: Combines semantic (AI) and keyword search"
+              >
+                Hybrid
+              </button>
+              <button
+                onClick={() => setSearchMode('rag')}
+                className={`px-2 py-0.5 rounded transition-colors ${
+                  searchMode === 'rag' 
+                    ? 'bg-blue-500 text-white' 
+                    : 'text-gray-400 hover:text-white'
+                }`}
+                title="RAG: Semantic search using AI embeddings"
+              >
+                AI
+              </button>
+              <button
+                onClick={() => setSearchMode('sql')}
+                className={`px-2 py-0.5 rounded transition-colors ${
+                  searchMode === 'sql' 
+                    ? 'bg-blue-500 text-white' 
+                    : 'text-gray-400 hover:text-white'
+                }`}
+                title="SQL: Keyword-based database search"
+              >
+                SQL
+              </button>
+            </div>
+            
             <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-1 text-xs text-gray-400 bg-gray-800 rounded">
               ESC
             </kbd>

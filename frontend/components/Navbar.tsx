@@ -10,7 +10,7 @@ export function Navbar() {
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2 font-bold text-xl">
           <Bot className="w-6 h-6" />
-          <span>AgentTest</span>
+          <span>BenchMind</span>
         </Link>
 
         {/* Navigation Links */}

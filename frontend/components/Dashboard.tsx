@@ -10,11 +10,12 @@ import TestingPanel from './TestingPanel';
 import TestReportPanel from './TestReportPanel';
 import ChangeQueuePanel from './ChangeQueuePanel';
 import { TestSuitesPanel } from './TestSuitesPanel';
-import { Loader2, Database, Trash2, Activity, Beaker, FileText, RefreshCw } from 'lucide-react';
+import { Loader2, Database, Trash2, Activity, Beaker, FileText, RefreshCw, ChevronRight, ChevronLeft } from 'lucide-react';
 
 export function Dashboard() {
   const [githubUrl, setGithubUrl] = useState('');
   const [rightPanelView, setRightPanelView] = useState<'status' | 'testing' | 'report' | 'suites'>('status');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const { 
     agentData, 
     isLoading, 
@@ -294,8 +295,8 @@ export function Dashboard() {
 
   return (
     <div className="h-screen pt-16 flex">
-      {/* Main Canvas Area - 3:4 ratio */}
-      <div className="flex-3 relative bg-muted/30">
+      {/* Main Canvas Area - expands when sidebar is collapsed */}
+      <div className={`relative bg-muted/30 transition-all duration-300 ${isSidebarCollapsed ? 'flex-1' : 'flex-3'}`}>
         {!agentData && !isLoading ? (
           <div className="flex items-center justify-center h-full">
             <div className="max-w-md w-full px-8">
@@ -482,7 +483,9 @@ export function Dashboard() {
       </div>
 
       {/* Right Panel - Status or Testing */}
-      <div className="flex-1 border-l border-border bg-background overflow-hidden flex flex-col">
+      <div className={`border-l border-border bg-background overflow-hidden flex flex-col transition-all duration-300 ${
+        isSidebarCollapsed ? 'w-0 opacity-0' : 'flex-1 opacity-100'
+      }`}>
         {/* Tab Switcher */}
         <div className="flex border-b border-border bg-muted/50">
           <button
@@ -529,6 +532,19 @@ export function Dashboard() {
           {rightPanelView === 'suites' && <TestSuitesPanel />}
         </div>
       </div>
+
+      {/* Collapse/Expand Toggle Button */}
+      <button
+        onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+        className="fixed right-4 top-20 z-50 p-2 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 transition-all duration-300"
+        title={isSidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+      >
+        {isSidebarCollapsed ? (
+          <ChevronLeft className="w-5 h-5" />
+        ) : (
+          <ChevronRight className="w-5 h-5" />
+        )}
+      </button>
     </div>
   );
 }
