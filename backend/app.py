@@ -19,7 +19,7 @@ from services.cache_manager import CacheManager
 from services.encryption import encrypt_token, decrypt_token
 
 from database import get_db, init_db
-from models import User, Project, Analysis, GitHubRepositoryCache
+from models import User, Project, Analysis, GitHubRepositoryCache, TestSession
 
 load_dotenv()
 
@@ -1312,6 +1312,146 @@ def clear_cache():
         
     except Exception as e:
         logger.error(f"Error clearing cache: {str(e)}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+# ============================================================================
+# TEST SESSION ENDPOINTS
+# ============================================================================
+
+@app.route('/api/test-sessions', methods=['POST'])
+def create_test_session():
+    """
+    Create or save a test session with results and fixes
+    """
+    try:
+        data = request.json
+        logger.info(f"Creating test session: {data.get('name')}")
+        
+        # Convert snake_case or camelCase to correct format
+        analysis_id = data.get('analysis_id') or data.get('analysisId')
+        project_id = data.get('project_id') or data.get('projectId')
+        test_cases = data.get('test_cases') or data.get('testCases', [])
+        test_report = data.get('test_report') or data.get('testReport')
+        fixes_locked = data.get('fixes_locked') or data.get('fixesLocked', False)
+        completed_at_str = data.get('completed_at') or data.get('completedAt')
+        
+        # Handle metadata (can be nested or flat)
+        if 'metadata' in data:
+            metadata = data['metadata']
+            total_tests = metadata.get('totalTests', 0)
+            passed_tests = metadata.get('passedTests', 0)
+            failed_tests = metadata.get('failedTests', 0)
+            warning_tests = metadata.get('warningTests', 0)
+            success_rate = metadata.get('successRate', 0.0)
+            total_fixes = metadata.get('totalFixes', 0)
+            pending_fixes = metadata.get('pendingFixes', 0)
+            accepted_fixes = metadata.get('acceptedFixes', 0)
+            rejected_fixes = metadata.get('rejectedFixes', 0)
+        else:
+            # Flat structure
+            total_tests = data.get('total_tests', 0)
+            passed_tests = data.get('passed_tests', 0)
+            failed_tests = data.get('failed_tests', 0)
+            warning_tests = data.get('warning_tests', 0)
+            success_rate = data.get('success_rate', 0.0)
+            total_fixes = data.get('total_fixes', 0)
+            pending_fixes = data.get('pending_fixes', 0)
+            accepted_fixes = data.get('accepted_fixes', 0)
+            rejected_fixes = data.get('rejected_fixes', 0)
+        
+        with get_db() as db:
+            test_session = TestSession(
+                id=data.get('id') or str(uuid.uuid4()),
+                analysis_id=analysis_id,
+                project_id=project_id,
+                name=data.get('name'),
+                color=data.get('color'),
+                test_cases=test_cases,
+                test_report=test_report,
+                fixes=data.get('fixes', []),
+                total_tests=total_tests,
+                passed_tests=passed_tests,
+                failed_tests=failed_tests,
+                warning_tests=warning_tests,
+                success_rate=success_rate,
+                total_fixes=total_fixes,
+                pending_fixes=pending_fixes,
+                accepted_fixes=accepted_fixes,
+                rejected_fixes=rejected_fixes,
+                fixes_locked=fixes_locked,
+                completed_at=datetime.fromisoformat(completed_at_str) if completed_at_str else None
+            )
+            
+            db.add(test_session)
+            db.commit()
+            db.refresh(test_session)
+            
+            return jsonify(test_session.to_dict()), 201
+            
+    except Exception as e:
+        logger.error(f"Error creating test session: {str(e)}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/test-sessions/<session_id>', methods=['PATCH'])
+def update_test_session(session_id):
+    """
+    Update test session (e.g., fix status changes)
+    """
+    try:
+        data = request.json
+        logger.info(f"Updating test session: {session_id}")
+        
+        with get_db() as db:
+            test_session = db.query(TestSession).filter_by(id=session_id).first()
+            if not test_session:
+                return jsonify({'error': 'Test session not found'}), 404
+            
+            # Update fields
+            if 'fixes' in data:
+                test_session.fixes = data['fixes']
+            if 'metadata' in data:
+                meta = data['metadata']
+                test_session.pending_fixes = meta.get('pendingFixes', test_session.pending_fixes)
+                test_session.accepted_fixes = meta.get('acceptedFixes', test_session.accepted_fixes)
+                test_session.rejected_fixes = meta.get('rejectedFixes', test_session.rejected_fixes)
+            if 'fixesLocked' in data:
+                test_session.fixes_locked = data['fixesLocked']
+            
+            db.commit()
+            db.refresh(test_session)
+            
+            return jsonify(test_session.to_dict()), 200
+            
+    except Exception as e:
+        logger.error(f"Error updating test session: {str(e)}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/test-sessions/analysis/<analysis_id>', methods=['GET'])
+def get_test_sessions_by_analysis(analysis_id):
+    """
+    Get all test sessions for an analysis
+    """
+    try:
+        with get_db() as db:
+            test_sessions = db.query(TestSession).filter_by(analysis_id=analysis_id).order_by(TestSession.created_at.desc()).all()
+            return jsonify([session.to_dict() for session in test_sessions]), 200
+            
+    except Exception as e:
+        logger.error(f"Error fetching test sessions: {str(e)}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/test-sessions/project/<project_id>', methods=['GET'])
+def get_test_sessions_by_project(project_id):
+    """
+    Get all test sessions for a project
+    """
+    try:
+        with get_db() as db:
+            test_sessions = db.query(TestSession).filter_by(project_id=project_id).order_by(TestSession.created_at.desc()).all()
+            return jsonify([session.to_dict() for session in test_sessions]), 200
+            
+    except Exception as e:
+        logger.error(f"Error fetching test sessions: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':

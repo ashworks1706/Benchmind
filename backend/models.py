@@ -123,6 +123,7 @@ class Analysis(Base):
     
     # Relationships
     project = relationship('Project', back_populates='analyses')
+    test_sessions = relationship('TestSession', back_populates='analysis', cascade='all, delete-orphan')
     
     def to_dict(self):
         return {
@@ -139,6 +140,70 @@ class Analysis(Base):
             'completedAt': self.completed_at.isoformat() if self.completed_at else None,
             'durationMs': self.duration_ms,
             'fromCache': self.from_cache,
+        }
+
+
+class TestSession(Base):
+    """Stores individual test sessions with their results and fixes"""
+    __tablename__ = 'test_sessions'
+    
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    analysis_id = Column(String(36), ForeignKey('analyses.id'), nullable=True, index=True)  # Nullable for standalone sessions
+    project_id = Column(String(36), ForeignKey('projects.id'), nullable=True, index=True)  # Nullable for standalone sessions
+    
+    name = Column(String(255), nullable=False)
+    color = Column(String(20))  # Gradient color for visualization
+    
+    # Test data stored as JSON
+    test_cases = Column(JSON)  # Array of test case IDs
+    test_report = Column(JSON)  # Full test report
+    fixes = Column(JSON)  # Array of fixes with status (pending/accepted/rejected)
+    
+    # Metadata
+    total_tests = Column(Integer, default=0)
+    passed_tests = Column(Integer, default=0)
+    failed_tests = Column(Integer, default=0)
+    warning_tests = Column(Integer, default=0)
+    success_rate = Column(Float, default=0.0)
+    
+    total_fixes = Column(Integer, default=0)
+    pending_fixes = Column(Integer, default=0)
+    accepted_fixes = Column(Integer, default=0)
+    rejected_fixes = Column(Integer, default=0)
+    
+    fixes_locked = Column(Boolean, default=False)  # True when user must review fixes
+    
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    completed_at = Column(DateTime)
+    
+    # Relationships
+    analysis = relationship('Analysis', back_populates='test_sessions')
+    project = relationship('Project')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'analysisId': self.analysis_id,
+            'projectId': self.project_id,
+            'name': self.name,
+            'color': self.color,
+            'testCases': self.test_cases or [],
+            'testReport': self.test_report,
+            'fixes': self.fixes or [],
+            'metadata': {
+                'totalTests': self.total_tests or 0,
+                'passedTests': self.passed_tests or 0,
+                'failedTests': self.failed_tests or 0,
+                'warningTests': self.warning_tests or 0,
+                'successRate': self.success_rate or 0.0,
+                'totalFixes': self.total_fixes or 0,
+                'pendingFixes': self.pending_fixes or 0,
+                'acceptedFixes': self.accepted_fixes or 0,
+                'rejectedFixes': self.rejected_fixes or 0,
+            },
+            'fixesLocked': self.fixes_locked,
+            'createdAt': self.created_at.isoformat() if self.created_at else None,
+            'completedAt': self.completed_at.isoformat() if self.completed_at else None,
         }
 
 
