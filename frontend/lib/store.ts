@@ -665,4 +665,9 @@ export const useStore = create<AppState>((set, get) => ({
     const state = get();
     return state.visibleSessionIds;
   },
+  
+  // Objective Focus Actions
+  setObjectiveFocus: (focus) => set((state) => ({
+    objectiveFocus: { ...state.objectiveFocus, ...focus }
+  })),
 }));

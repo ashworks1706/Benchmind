@@ -125,7 +125,7 @@ export function calculateConnectionCost(
   multipliers?: CostMultipliers
 ): CostEstimate {
   // Connection costs = data transfer + coordination overhead
-  const dataTokens = relationship.data_flow ? estimateTokens(relationship.data_flow) : 50;
+  const dataTokens = relationship?.data_flow ? estimateTokens(relationship.data_flow) : 50;
   
   // Apply multipliers
   const accuracyMultiplier = multipliers?.accuracy ?? 1.0;

@@ -52,6 +52,7 @@ export function Canvas() {
     setShowProgressReport,
     acceptFix,
     rejectFix,
+    objectiveFocus,
   } = useStore();
   const canvasRef = useRef<HTMLDivElement>(null);
   const [nodes, setNodes] = useState<CanvasNode[]>([]);
@@ -64,8 +65,97 @@ export function Canvas() {
   const [showAgents, setShowAgents] = useState(true);
   const [showTools, setShowTools] = useState(true);
   const [hiddenNodeIds, setHiddenNodeIds] = useState<Set<string>>(new Set());
+  const [fadingOutNodeIds, setFadingOutNodeIds] = useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+
+  // Calculate cost multipliers from objective focus sliders
+  const costMultipliers: CostMultipliers = useMemo(() => {
+    const reasoningFactor = 1 + (objectiveFocus.reasoning - 50) / 100; // 0.5 to 1.5
+    const accuracyFactor = 1 + (objectiveFocus.accuracy - 50) / 100;   // 0.5 to 1.5
+    const costFactor = 1 - (objectiveFocus.costOptimization - 50) / 100; // 1.5 to 0.5 (inverted)
+    const speedFactor = 1 - (objectiveFocus.speed - 50) / 100;          // 1.5 to 0.5 (inverted)
+    
+    return {
+      reasoning: reasoningFactor,
+      accuracy: accuracyFactor,
+      costOptimization: costFactor,
+      speed: speedFactor,
+    };
+  }, [objectiveFocus]);
+
+  // Calculate visual effects based on objective focus
+  const visualEffects = useMemo(() => {
+    // More reasoning = larger nodes (more complex processing)
+    const sizeScale = 0.85 + (objectiveFocus.reasoning / 200); // 0.85 to 1.35
+    
+    // More accuracy = brighter, more saturated colors
+    const colorIntensity = 0.6 + (objectiveFocus.accuracy / 250); // 0.6 to 1.0
+    
+    // More cost optimization = slightly transparent (lighter weight)
+    const opacity = 1.0 - (objectiveFocus.costOptimization / 500); // 0.8 to 1.0
+    
+    // More speed = animation speed (reduced range for subtlety)
+    const animationDuration = 1.2 - (objectiveFocus.speed / 200); // 0.7s to 1.2s
+    
+    return {
+      sizeScale,
+      colorIntensity,
+      opacity,
+      animationDuration,
+    };
+  }, [objectiveFocus]);
+
+  // Calculate dynamic costs for all nodes, filtering out hidden ones
+  const dynamicCosts = useMemo(() => {
+    const costs = new Map<string, { totalCost: number; apiCalls: number }>();
+    
+    // Calculate costs for visible nodes only
+    nodes.forEach(node => {
+      if (hiddenNodeIds.has(node.id)) return;
+      
+      if (node.type === 'agent') {
+        const cost = calculateAgentCost(node.data as Agent, 500, 200, 10, costMultipliers);
+        costs.set(node.id, { totalCost: cost.totalCost, apiCalls: cost.apiCalls });
+      } else if (node.type === 'tool') {
+        const cost = calculateToolCost(node.data as Tool, 5, costMultipliers);
+        costs.set(node.id, { totalCost: cost.totalCost, apiCalls: cost.apiCalls });
+      }
+    });
+    
+    // Calculate costs for visible edges
+    edges.forEach(edge => {
+      // Skip if either end is hidden
+      if (hiddenNodeIds.has(edge.from.id) || hiddenNodeIds.has(edge.to.id)) return;
+      
+      // Only calculate cost if edge has data (relationships), otherwise use default cost with multipliers
+      if (edge.data) {
+        const cost = calculateConnectionCost(edge.data, 10, costMultipliers);
+        costs.set(edge.id, { totalCost: cost.totalCost, apiCalls: cost.apiCalls });
+      } else {
+        // Default cost for edges without relationship data (e.g., agent-tool connections)
+        // Apply multipliers to default cost as well
+        const accuracyMultiplier = costMultipliers.accuracy ?? 1.0;
+        const costOptimizationMultiplier = costMultipliers.costOptimization ?? 1.0;
+        const speedMultiplier = costMultipliers.speed ?? 1.0;
+        
+        const baseCost = 0.00005;
+        const baseCallsPerDay = 10;
+        const adjustedCallsPerDay = baseCallsPerDay * accuracyMultiplier * speedMultiplier;
+        const totalCost = baseCost * adjustedCallsPerDay / costOptimizationMultiplier;
+        
+        costs.set(edge.id, { totalCost, apiCalls: Math.round(adjustedCallsPerDay) });
+      }
+    });
+    
+    // Calculate total canvas cost
+    let totalCanvasCost = 0;
+    costs.forEach(cost => {
+      totalCanvasCost += cost.totalCost;
+    });
+    
+    return { costs, totalCanvasCost };
+  }, [nodes, edges, hiddenNodeIds, costMultipliers]);
 
   // Auto-fit zoom function
   const autoFitZoom = useCallback(() => {
@@ -543,19 +633,38 @@ export function Canvas() {
     }));
   }, [nodes]);
 
-  // Handler to hide/show a node
+  // Handler to hide/show a node with fade animation
   const toggleNodeVisibility = useCallback((nodeId: string) => {
-    setHiddenNodeIds(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(nodeId)) {
+    const isCurrentlyHidden = hiddenNodeIds.has(nodeId);
+    
+    if (isCurrentlyHidden) {
+      // Show the node (fade in) - remove from hidden immediately
+      setHiddenNodeIds(prev => {
+        const newSet = new Set(prev);
         newSet.delete(nodeId);
-      } else {
-        newSet.add(nodeId);
-      }
-      return newSet;
-    });
+        return newSet;
+      });
+    } else {
+      // Hide the node with fade out animation
+      setFadingOutNodeIds(prevFading => new Set(prevFading).add(nodeId));
+      
+      // After animation completes, actually hide it
+      setTimeout(() => {
+        setHiddenNodeIds(prev => {
+          const newSet = new Set(prev);
+          newSet.add(nodeId);
+          return newSet;
+        });
+        setFadingOutNodeIds(prevFading => {
+          const newFading = new Set(prevFading);
+          newFading.delete(nodeId);
+          return newFading;
+        });
+      }, 300); // Match fadeOut animation duration
+    }
+    
     setContextMenu(null);
-  }, []);
+  }, [hiddenNodeIds]);
 
   // Handler to show all hidden nodes
   const showAllNodes = useCallback(() => {
@@ -716,6 +825,36 @@ export function Canvas() {
         .edge-group:hover .edge-path {
           filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.5)) !important;
         }
+        
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+            transform: scale(0.9);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+        
+        @keyframes fadeOut {
+          from {
+            opacity: 1;
+            transform: scale(1);
+          }
+          to {
+            opacity: 0;
+            transform: scale(0.9);
+          }
+        }
+        
+        .node-fade-in {
+          animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+        
+        .node-fade-out {
+          animation: fadeOut 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
       `}</style>
       {/* Grid background */}
       <div className="canvas-background absolute inset-0" style={{
@@ -777,6 +916,11 @@ export function Canvas() {
               return null;
             }
 
+            // Get edge cost for key generation to force re-render when costs change
+            const edgeCost = dynamicCosts.costs.get(edge.id);
+            const edgeCostKey = edgeCost ? `${edgeCost.totalCost.toFixed(6)}-${edgeCost.apiCalls}` : 'nocost';
+            const edgeKey = `${edge.id}-${edgeCostKey}`;
+
             const fromX = edge.from.x + edge.from.width / 2;
             const fromY = edge.from.y + edge.from.height / 2;
             const toX = edge.to.x + edge.to.width / 2;
@@ -793,7 +937,7 @@ export function Canvas() {
             const testColor = isRunningTestEdge && currentTestColor ? currentTestColor : null;
             
             // Use test-specific color for running test edges, otherwise use edge.color or defaults
-            let color = testColor?.primary || (isTestTarget && edge.color ? edge.color : (isAgentTool ? '#10b981' : '#ef4444'));
+            const color = testColor?.primary || (isTestTarget && edge.color ? edge.color : (isAgentTool ? '#10b981' : '#ef4444'));
             const strokeWidth = isRunningTestEdge ? 4 : (isAgentTool ? 3 : isTestTarget ? 2 : 4);
             
             // Check if this edge should be highlighted
@@ -871,7 +1015,7 @@ export function Canvas() {
             }
 
             return (
-              <g key={edge.id} className="edge-group">
+              <g key={edgeKey} className="edge-group">
                 {/* Invisible wider path for easier clicking */}
                 <path
                   d={path}
@@ -888,7 +1032,7 @@ export function Canvas() {
                 <path
                   d={path}
                   stroke={strokeColor}
-                  strokeWidth={strokeWidth2}
+                  strokeWidth={strokeWidth2 * visualEffects.sizeScale}
                   fill="none"
                   markerEnd={`url(#${markerId})`}
                   className={`cursor-pointer pointer-events-none transition-all edge-path ${
@@ -902,14 +1046,19 @@ export function Canvas() {
                       : isHoverHighlighted
                       ? 'drop-shadow(0 0 8px rgba(139, 92, 246, 0.7))'
                       : 'drop-shadow(0 0 3px rgba(0,0,0,0.2))',
-                    opacity: hoveredNodeId ? (isHoverHighlighted ? 1 : 0.3) : 1,
+                    opacity: hoveredNodeId 
+                      ? (isHoverHighlighted ? visualEffects.opacity : 0.3) 
+                      : visualEffects.opacity,
+                    transition: `all ${visualEffects.animationDuration}s cubic-bezier(0.4, 0, 0.2, 1)`,
                   }}
                 />
                 {/* Connection cost label - show for all connection types */}
                 {(isAgentTool || !isTestTarget) && (() => {
-                  const connectionCost = edge.data ? 
-                    calculateConnectionCost(edge.data) : 
-                    { totalCost: 0.005, apiCalls: 100, inputTokens: 1000 }; // Default for agent-tool connections
+                  // Use dynamic cost if available, otherwise calculate
+                  const dynamicCost = dynamicCosts.costs.get(edge.id);
+                  const connectionCost = dynamicCost || (edge.data ? 
+                    calculateConnectionCost(edge.data, 10, costMultipliers) : 
+                    { totalCost: 0.005, apiCalls: 100 }); // Default for agent-tool connections
                   
                   return (
                     <>
@@ -923,7 +1072,7 @@ export function Canvas() {
                         className="pointer-events-auto cursor-help select-none"
                       >
                         <title>
-                          {`Connection Cost: ${formatCost(connectionCost.totalCost)}/day | Data transfer overhead | Est. ${connectionCost.apiCalls} calls/day | ${connectionCost.inputTokens} tokens`}
+                          {`Connection Cost: ${formatCost(connectionCost.totalCost)}/day | Data transfer overhead | Est. ${connectionCost.apiCalls} calls/day | Adjusted by objective focus`}
                         </title>
                         <tspan
                           style={{
@@ -1107,32 +1256,49 @@ export function Canvas() {
             effectClass = 'hover:scale-105';
           }
 
-          // Skip rendering if node is hidden
-          if (hiddenNodeIds.has(node.id)) {
+          // Skip rendering if node is hidden (but not if it's fading out)
+          if (hiddenNodeIds.has(node.id) && !fadingOutNodeIds.has(node.id)) {
             return null;
           }
 
           // Check if this node is connected to hovered node
           const isConnectedToHovered = hoveredNodeId && connectedNodeIds.has(node.id) && node.id !== hoveredNodeId;
           const isCurrentlyHovered = node.id === hoveredNodeId;
+          
+          // Determine fade animation class
+          const isFadingOut = fadingOutNodeIds.has(node.id);
+          const isFadingIn = !hiddenNodeIds.has(node.id) && !isFadingOut;
+          const fadeClass = isFadingOut ? 'node-fade-out' : isFadingIn ? 'node-fade-in' : '';
+
+          // Get node cost for key generation to force re-render when costs change
+          const nodeCost = dynamicCosts.costs.get(node.id);
+          const costKey = nodeCost ? `${nodeCost.totalCost.toFixed(6)}-${nodeCost.apiCalls}` : 'nocost';
 
           return (
             <div
-              key={node.id}
-              className={`absolute cursor-move transition-all duration-300 ${
+              key={`${node.id}-${costKey}`}
+              className={`absolute cursor-move transition-all ${
                 isAgent
                   ? `group px-5 py-4 rounded-xl border-2 shadow-lg hover:shadow-2xl ${borderClass} ${bgClass} ${effectClass}`
                   : isTest
                   ? `group px-3 py-2.5 rounded-lg border-2 shadow-md hover:shadow-lg ${borderClass} ${bgClass} ${effectClass}`
                   : `group px-3 py-2.5 rounded-lg border-2 shadow-md hover:shadow-lg ${borderClass} ${bgClass} ${effectClass}`
-              } ${isConnectedToHovered ? 'ring-2 ring-purple-400/60' : ''} ${isCurrentlyHovered ? 'ring-4 ring-purple-500/80' : ''}`}
+              } ${isConnectedToHovered ? 'ring-2 ring-purple-400/60' : ''} ${isCurrentlyHovered ? 'ring-4 ring-purple-500/80' : ''} ${fadeClass}`}
               style={{
                 left: node.x,
                 top: node.y,
                 width: node.width,
                 backdropFilter: 'blur(10px)',
-                opacity: hoveredNodeId ? (isCurrentlyHovered || isConnectedToHovered ? 1 : 0.4) : 1,
-                transform: isConnectedToHovered ? 'scale(1.05)' : isCurrentlyHovered ? 'scale(1.08)' : 'scale(1)',
+                opacity: hoveredNodeId 
+                  ? (isCurrentlyHovered || isConnectedToHovered ? visualEffects.opacity : 0.4) 
+                  : visualEffects.opacity,
+                transform: isConnectedToHovered 
+                  ? `scale(${1.05 * visualEffects.sizeScale})` 
+                  : isCurrentlyHovered 
+                  ? `scale(${1.08 * visualEffects.sizeScale})` 
+                  : `scale(${visualEffects.sizeScale})`,
+                filter: `saturate(${visualEffects.colorIntensity})`,
+                transition: `all ${visualEffects.animationDuration}s cubic-bezier(0.4, 0, 0.2, 1)`,
                 ...customStyle,
               }}
               onMouseDown={(e) => handleNodeMouseDown(e, node)}
@@ -1168,7 +1334,10 @@ export function Canvas() {
 
               {isAgent ? (
                 <>
-                  <AgentNode data={node.data as Agent} />
+                  <AgentNode 
+                    data={node.data as Agent} 
+                    cost={dynamicCosts.costs.get(node.id)}
+                  />
                   {isWarningHighlighted && (
                     <div className="absolute -top-2 -right-2 bg-orange-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center shadow-lg animate-bounce">
                       ⚠️
@@ -1183,7 +1352,10 @@ export function Canvas() {
                 />
               ) : (
                 <>
-                  <ToolNode data={node.data as Tool} />
+                  <ToolNode 
+                    data={node.data as Tool}
+                    cost={dynamicCosts.costs.get(node.id)}
+                  />
                   {isWarningHighlighted && (
                     <div className="absolute -top-2 -right-2 bg-orange-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center shadow-lg animate-bounce">
                       ⚠️
@@ -1275,8 +1447,21 @@ export function Canvas() {
       )}
 
       {/* Mini info */}
-      <div className="absolute top-4 right-4 bg-background/90 border border-border rounded-lg shadow-lg px-3 py-2 text-sm backdrop-blur">
-        Zoom: {Math.round(transform.scale * 100)}%
+      <div className="absolute top-4 right-4 flex flex-col gap-2">
+        <div className="bg-background/90 border border-border rounded-lg shadow-lg px-3 py-2 text-sm backdrop-blur">
+          Zoom: {Math.round(transform.scale * 100)}%
+        </div>
+        <div className="bg-background/90 border border-border rounded-lg shadow-lg px-3 py-2 backdrop-blur">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs font-serif text-muted-foreground">Total Canvas Cost:</span>
+            <span className={`text-sm font-serif font-bold ${getCostColor(dynamicCosts.totalCanvasCost)} tracking-wide`}>
+              {formatCost(dynamicCosts.totalCanvasCost)}/day
+            </span>
+          </div>
+          <div className="text-xs text-muted-foreground mt-1 font-mono">
+            {nodes.filter(n => !hiddenNodeIds.has(n.id)).length} visible nodes
+          </div>
+        </div>
       </div>
 
       {/* Session Selector */}
@@ -1340,8 +1525,9 @@ export function Canvas() {
 }
 
 // Agent Node Component
-function AgentNode({ data }: { data: Agent }) {
-  const cost = calculateAgentCost(data);
+function AgentNode({ data, cost }: { data: Agent; cost?: { totalCost: number; apiCalls: number } }) {
+  const defaultCost = calculateAgentCost(data);
+  const displayCost = cost || defaultCost;
   
   return (
     <div className="flex flex-col gap-2">
@@ -1369,10 +1555,10 @@ function AgentNode({ data }: { data: Agent }) {
           </div>
         )}
         <div 
-          className={`text-xs font-serif font-semibold ${getCostColor(cost.totalCost)} tracking-wide`}
-          title={`Agent Cost: ${formatCost(cost.totalCost)}/day | Based on ${cost.model} model | Est. ${cost.apiCalls} API calls/day | ${cost.inputTokens} input + ${cost.outputTokens} output tokens | Click for detailed breakdown`}
+          className={`text-xs font-serif font-semibold ${getCostColor(displayCost.totalCost)} tracking-wide`}
+          title={`Agent Cost: ${formatCost(displayCost.totalCost)}/day | Est. ${displayCost.apiCalls} API calls/day | Adjusted by objective focus | Click for detailed breakdown`}
         >
-          {formatCost(cost.totalCost)}/day
+          {formatCost(displayCost.totalCost)}/day
         </div>
       </div>
     </div>
@@ -1380,8 +1566,9 @@ function AgentNode({ data }: { data: Agent }) {
 }
 
 // Tool Node Component
-function ToolNode({ data }: { data: Tool }) {
-  const cost = calculateToolCost(data);
+function ToolNode({ data, cost }: { data: Tool; cost?: { totalCost: number; apiCalls: number } }) {
+  const defaultCost = calculateToolCost(data);
+  const displayCost = cost || defaultCost;
   
   return (
     <div className="flex flex-col items-center gap-1.5">
@@ -1392,10 +1579,10 @@ function ToolNode({ data }: { data: Tool }) {
         {data.name}
       </span>
       <span 
-        className={`text-[10px] font-serif font-semibold ${getCostColor(cost.totalCost)} tracking-wide`}
-        title={`Tool Cost: ${formatCost(cost.totalCost)}/day | Execution overhead only | Est. ${cost.apiCalls} calls/day | Tools don't use LLM tokens | Click for detailed breakdown`}
+        className={`text-[10px] font-serif font-semibold ${getCostColor(displayCost.totalCost)} tracking-wide`}
+        title={`Tool Cost: ${formatCost(displayCost.totalCost)}/day | Execution overhead | Est. ${displayCost.apiCalls} calls/day | Adjusted by objective focus | Click for detailed breakdown`}
       >
-        {formatCost(cost.totalCost)}/day
+        {formatCost(displayCost.totalCost)}/day
       </span>
     </div>
   );
@@ -1460,82 +1647,82 @@ function TestNode({ data, result, isRunning }: { data: TestCase; result: any; is
     <div className="flex flex-col gap-2 relative">
       {/* Recommendation badge */}
       {hasRecommendations && (
-        <div className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 rounded-full flex items-center justify-center text-[10px] z-10">
+        <div className="absolute -top-1 -right-1 w-5 h-5 bg-amber-500 rounded-full flex items-center justify-center text-xs z-10 shadow-md">
           💡
         </div>
       )}
       
-      <div className="flex items-center gap-2">
-        <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
+      <div className="flex items-center gap-2.5">
+        <div className="w-9 h-9 rounded-lg bg-purple-500/20 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
           {getCategoryIcon(data.category)}
         </div>
         <div className="flex-1 min-w-0">
-          <h4 className="font-bold text-xs text-purple-700 dark:text-purple-300 leading-tight truncate">
+          <h4 className="font-serif font-bold text-sm text-purple-700 dark:text-purple-300 leading-tight">
             {data.name}
           </h4>
-          <span className="text-[10px] text-purple-600/70 dark:text-purple-400/70 font-medium">
+          <span className="text-xs text-purple-600/70 dark:text-purple-400/70 font-serif font-medium">
             {data.category}
           </span>
         </div>
       </div>
       
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] text-muted-foreground truncate flex-1">
-          Target: {data.target.name}
+      <div className="flex items-center justify-between mt-0.5">
+        <span className="text-xs font-serif text-muted-foreground truncate flex-1">
+          Target: <span className="font-semibold">{data.target.name}</span>
         </span>
-        <span className="text-base ml-1">
+        <span className="text-lg ml-2">
           {getStatusIcon()}
         </span>
       </div>
       
       {/* Running progress bar */}
       {isRunning && (
-        <div className="w-full h-1 bg-blue-200 rounded-full overflow-hidden">
-          <div className="h-full bg-blue-500 animate-pulse" style={{ width: '60%' }} />
+        <div className="w-full h-1.5 bg-blue-200 dark:bg-blue-900/30 rounded-full overflow-hidden mt-1">
+          <div className="h-full bg-blue-500 animate-pulse rounded-full" style={{ width: '60%' }} />
         </div>
       )}
 
       {/* Test Results Summary */}
       {result && !isRunning && (
-        <div className="space-y-1.5 pt-1.5 border-t border-purple-500/20">
+        <div className="space-y-2 pt-2 border-t border-purple-500/20">
           {/* Status summary */}
-          <div className={`text-[10px] font-semibold px-2 py-1 rounded ${
+          <div className={`text-xs font-serif font-semibold px-2.5 py-1.5 rounded-md ${
             result.status === 'passed' 
-              ? 'bg-green-500/10 text-green-700 dark:text-green-300' 
+              ? 'bg-green-500/10 text-green-700 dark:text-green-300 border border-green-500/20' 
               : result.status === 'failed'
-              ? 'bg-red-500/10 text-red-700 dark:text-red-300'
-              : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
+              ? 'bg-red-500/10 text-red-700 dark:text-red-300 border border-red-500/20'
+              : 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20'
           }`}>
             {result.results?.summary || 'Test completed'}
           </div>
 
           {/* Execution time */}
           {result.execution_time && (
-            <div className="flex items-center justify-between text-[9px] text-muted-foreground px-1">
-              <span>Execution:</span>
-              <span className="font-mono font-semibold">{result.execution_time.toFixed(2)}s</span>
+            <div className="flex items-center justify-between text-xs font-serif px-1">
+              <span className="text-muted-foreground">Execution Time:</span>
+              <span className="font-mono font-bold text-foreground">{result.execution_time.toFixed(2)}s</span>
             </div>
           )}
 
           {/* Issues found count */}
           {result.results?.issues_found && result.results.issues_found.length > 0 && (
-            <div className="flex items-center justify-between text-[9px] px-1">
-              <span className="text-muted-foreground">Issues:</span>
-              <span className="font-semibold text-red-600 dark:text-red-400">
-                {result.results.issues_found.length} found
+            <div className="flex items-center justify-between text-xs font-serif px-1">
+              <span className="text-muted-foreground">Issues Found:</span>
+              <span className="font-bold text-red-600 dark:text-red-400">
+                {result.results.issues_found.length}
               </span>
             </div>
           )}
 
           {/* Metrics summary */}
           {result.results?.metrics && result.results.metrics.length > 0 && (
-            <div className="space-y-0.5">
+            <div className="space-y-1">
               {result.results.metrics.slice(0, 2).map((metric: any, idx: number) => (
-                <div key={idx} className="flex items-center justify-between text-[9px] px-1">
-                  <span className="text-muted-foreground truncate flex-1 mr-1">
+                <div key={idx} className="flex items-center justify-between text-xs font-serif px-1">
+                  <span className="text-muted-foreground truncate flex-1 mr-2">
                     {metric.name}:
                   </span>
-                  <span className={`font-mono font-semibold ${
+                  <span className={`font-mono font-bold ${
                     metric.passed ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                   }`}>
                     {metric.value !== undefined ? `${metric.value}${metric.unit || ''}` : (metric.passed ? '✓' : '✗')}
@@ -1543,8 +1730,8 @@ function TestNode({ data, result, isRunning }: { data: TestCase; result: any; is
                 </div>
               ))}
               {result.results.metrics.length > 2 && (
-                <div className="text-[9px] text-muted-foreground text-center">
-                  +{result.results.metrics.length - 2} more
+                <div className="text-xs font-serif text-muted-foreground text-center italic">
+                  +{result.results.metrics.length - 2} more metrics
                 </div>
               )}
             </div>
