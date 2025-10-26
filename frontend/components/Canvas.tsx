@@ -7,6 +7,7 @@ import { getTestCaseColor } from '@/lib/testColors';
 import { calculateAgentCost, calculateToolCost, calculateConnectionCost, formatCost, getCostColor } from '@/lib/costCalculator';
 import { SessionSelector } from './SessionSelector';
 import { ResearchReportModal } from './ResearchReportModal';
+import { ObjectiveFocusPanel } from './ObjectiveFocusPanel';
 
 interface CanvasNode {
   id: string;
@@ -61,6 +62,62 @@ export function Canvas() {
   const [draggedNode, setDraggedNode] = useState<CanvasNode | null>(null);
   const [nodeDragStart, setNodeDragStart] = useState({ x: 0, y: 0 });
 
+  // Auto-fit zoom function
+  const autoFitZoom = useCallback(() => {
+    if (!canvasRef.current || nodes.length === 0) return;
+
+    const canvasRect = canvasRef.current.getBoundingClientRect();
+    const padding = 100; // Padding around content
+
+    // Calculate bounding box of all nodes
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    
+    nodes.forEach(node => {
+      minX = Math.min(minX, node.x);
+      minY = Math.min(minY, node.y);
+      maxX = Math.max(maxX, node.x + node.width);
+      maxY = Math.max(maxY, node.y + node.height);
+    });
+
+    const contentWidth = maxX - minX;
+    const contentHeight = maxY - minY;
+
+    // Calculate scale to fit content with padding
+    const scaleX = (canvasRect.width - padding * 2) / contentWidth;
+    const scaleY = (canvasRect.height - padding * 2) / contentHeight;
+    
+    // Use the smaller scale to ensure everything fits, but don't zoom out too much or in too much
+    let scale = Math.min(scaleX, scaleY);
+    scale = Math.max(0.3, Math.min(scale, 1.0)); // Clamp between 0.3 and 1.0 (no zoom in, limited zoom out)
+
+    // Calculate position to center content
+    const x = (canvasRect.width - contentWidth * scale) / 2 - minX * scale;
+    const y = (canvasRect.height - contentHeight * scale) / 2 - minY * scale;
+
+    setTransform({ x, y, scale });
+  }, [nodes]);
+
+  // Auto-fit on nodes change or window resize
+  useEffect(() => {
+    if (nodes.length > 0) {
+      // Small delay to ensure rendering is complete
+      const timer = setTimeout(autoFitZoom, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [nodes.length, autoFitZoom]);
+
+  // Handle window resize
+  useEffect(() => {
+    const handleResize = () => {
+      if (nodes.length > 0) {
+        autoFitZoom();
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [nodes.length, autoFitZoom]);
+
   // Use pendingTestCases or testCases - whichever has data
   const activeTestCases = pendingTestCases.length > 0 ? pendingTestCases : testCases;
   
@@ -95,6 +152,32 @@ export function Canvas() {
     console.log('[Canvas] Showing visible session test cases:', visibleSessionTestCases.length);
     return visibleSessionTestCases;
   }, [pendingTestCases, testCollections, visibleSessionIds, isGeneratingTests]);
+
+  // Helper function to get test result from session's testReport
+  const getTestResultFromSessions = useCallback((testId: string) => {
+    // First check global testResults (for currently running tests)
+    const globalResult = testResults.get(testId);
+    if (globalResult) return globalResult;
+
+    // Then check each visible session's testReport
+    for (const collection of testCollections) {
+      for (const session of collection.testSessions || []) {
+        if (visibleSessionIds.includes(session.id)) {
+          // Check if this test belongs to this session
+          if (session.testCases?.some(tc => tc.id === testId)) {
+            // Get result from testReport
+            const testReport = session.testReport;
+            if (testReport?.test_results) {
+              const result = testReport.test_results.find((r: any) => r.test_id === testId);
+              if (result) return result;
+            }
+          }
+        }
+      }
+    }
+    
+    return null;
+  }, [testResults, testCollections, visibleSessionIds]);
   
   // Get the color for the currently running test
   const currentTestColor = currentRunningTestId 
@@ -309,8 +392,8 @@ export function Canvas() {
             );
             
             if (targetNode) {
-              // Determine color based on test result
-              const result = testResults.get(testCase.id);
+              // Determine color based on test result from sessions
+              const result = getTestResultFromSessions(testCase.id);
               const color = result 
                 ? (result.status === 'passed' ? '#22c55e' : result.status === 'failed' ? '#ef4444' : '#f59e0b')
                 : (isTestingInProgress && activeTestCases[currentTestIndex]?.id === testCase.id ? '#3b82f6' : '#6b7280');
@@ -331,7 +414,7 @@ export function Canvas() {
 
       return allNodes;
     });
-  }, [allDisplayedTestCases, agentData, testResults, isTestingInProgress, currentTestIndex, isGeneratingTests, activeTestCases]);
+  }, [allDisplayedTestCases, agentData, getTestResultFromSessions, isTestingInProgress, currentTestIndex, isGeneratingTests, activeTestCases]);
 
   // Update edge references when nodes move
   useEffect(() => {
@@ -394,13 +477,13 @@ export function Canvas() {
     setNodeDragStart({ x: e.clientX, y: e.clientY });
   }, []);
 
-  // Zoom handlers
+  // Zoom handlers with limits (no zoom in beyond 1.0, limited zoom out to 0.3)
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
     setTransform(prev => ({
       ...prev,
-      scale: Math.min(Math.max(prev.scale * delta, 0.1), 2),
+      scale: Math.min(Math.max(prev.scale * delta, 0.3), 1.0), // Clamp between 0.3 and 1.0
     }));
   }, []);
 
@@ -689,8 +772,9 @@ export function Canvas() {
                         x={(fromX + toX) / 2}
                         y={(fromY + toY) / 2 - (isAgentTool ? -15 : 35)}
                         textAnchor="middle"
-                        fontSize="12"
-                        fontWeight="700"
+                        fontSize="11"
+                        fontWeight="600"
+                        fontFamily="serif"
                         className="pointer-events-auto cursor-help select-none"
                       >
                         <title>
@@ -700,12 +784,12 @@ export function Canvas() {
                           style={{
                             paintOrder: 'stroke',
                             stroke: '#1f2937',
-                            strokeWidth: '3px',
-                            fill: '#fbbf24',
-                            fontWeight: 'bold',
+                            strokeWidth: '2px',
+                            fill: '#d1d5db',
+                            fontWeight: '600',
                           }}
                         >
-                          💰 {formatCost(connectionCost.totalCost)}/day
+                          {formatCost(connectionCost.totalCost)}/day
                         </tspan>
                       </text>
                     </>
@@ -771,8 +855,8 @@ export function Canvas() {
               e.to.id === node.id
             );
           
-          // Check if test has results
-          const testResult = isTest ? testResults.get((node.data as TestCase).id) : null;
+          // Check if test has results from sessions
+          const testResult = isTest ? getTestResultFromSessions((node.data as TestCase).id) : null;
           
           // Find test session color for this test node
           let sessionGradient: string | null = null;
@@ -924,25 +1008,27 @@ export function Canvas() {
       {/* Zoom controls */}
       <div className="absolute bottom-4 left-4 flex flex-col gap-2 bg-background border border-border rounded-lg shadow-lg p-2">
         <button
-          onClick={() => setTransform(prev => ({ ...prev, scale: Math.min(prev.scale * 1.2, 2) }))}
-          className="w-8 h-8 flex items-center justify-center hover:bg-muted rounded transition-colors"
-          title="Zoom In"
+          onClick={() => setTransform(prev => ({ ...prev, scale: Math.min(prev.scale * 1.2, 1.0) }))}
+          className="w-8 h-8 flex items-center justify-center hover:bg-muted rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Zoom In (Max 100%)"
+          disabled={transform.scale >= 1.0}
         >
           +
         </button>
         <button
-          onClick={() => setTransform(prev => ({ ...prev, scale: Math.max(prev.scale * 0.8, 0.1) }))}
-          className="w-8 h-8 flex items-center justify-center hover:bg-muted rounded transition-colors"
-          title="Zoom Out"
+          onClick={() => setTransform(prev => ({ ...prev, scale: Math.max(prev.scale * 0.8, 0.3) }))}
+          className="w-8 h-8 flex items-center justify-center hover:bg-muted rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Zoom Out (Min 30%)"
+          disabled={transform.scale <= 0.3}
         >
           −
         </button>
         <button
-          onClick={() => setTransform({ x: 0, y: 0, scale: 0.8 })}
-          className="w-8 h-8 flex items-center justify-center hover:bg-muted rounded transition-colors text-xs"
-          title="Reset View"
+          onClick={autoFitZoom}
+          className="w-8 h-8 flex items-center justify-center hover:bg-muted rounded transition-colors text-xs font-bold"
+          title="Fit to Window"
         >
-          ⟲
+          ⊡
         </button>
       </div>
 
@@ -1004,6 +1090,9 @@ export function Canvas() {
           />
         );
       })()}
+
+      {/* Objective Focus Control Panel */}
+      <ObjectiveFocusPanel />
     </div>
   );
 }
@@ -1038,10 +1127,10 @@ function AgentNode({ data }: { data: Agent }) {
           </div>
         )}
         <div 
-          className={`text-xs font-bold ${getCostColor(cost.totalCost)}`}
+          className={`text-xs font-serif font-semibold ${getCostColor(cost.totalCost)} tracking-wide`}
           title={`Agent Cost: ${formatCost(cost.totalCost)}/day | Based on ${cost.model} model | Est. ${cost.apiCalls} API calls/day | ${cost.inputTokens} input + ${cost.outputTokens} output tokens | Click for detailed breakdown`}
         >
-          💰 {formatCost(cost.totalCost)}/day
+          {formatCost(cost.totalCost)}/day
         </div>
       </div>
     </div>
@@ -1061,7 +1150,7 @@ function ToolNode({ data }: { data: Tool }) {
         {data.name}
       </span>
       <span 
-        className={`text-[10px] font-bold ${getCostColor(cost.totalCost)}`}
+        className={`text-[10px] font-serif font-semibold ${getCostColor(cost.totalCost)} tracking-wide`}
         title={`Tool Cost: ${formatCost(cost.totalCost)}/day | Execution overhead only | Est. ${cost.apiCalls} calls/day | Tools don't use LLM tokens | Click for detailed breakdown`}
       >
         {formatCost(cost.totalCost)}/day
@@ -1157,9 +1246,77 @@ function TestNode({ data, result, isRunning }: { data: TestCase; result: any; is
         </span>
       </div>
       
+      {/* Running progress bar */}
       {isRunning && (
         <div className="w-full h-1 bg-blue-200 rounded-full overflow-hidden">
           <div className="h-full bg-blue-500 animate-pulse" style={{ width: '60%' }} />
+        </div>
+      )}
+
+      {/* Test Results Summary */}
+      {result && !isRunning && (
+        <div className="space-y-1.5 pt-1.5 border-t border-purple-500/20">
+          {/* Status summary */}
+          <div className={`text-[10px] font-semibold px-2 py-1 rounded ${
+            result.status === 'passed' 
+              ? 'bg-green-500/10 text-green-700 dark:text-green-300' 
+              : result.status === 'failed'
+              ? 'bg-red-500/10 text-red-700 dark:text-red-300'
+              : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
+          }`}>
+            {result.results?.summary || 'Test completed'}
+          </div>
+
+          {/* Execution time */}
+          {result.execution_time && (
+            <div className="flex items-center justify-between text-[9px] text-muted-foreground px-1">
+              <span>Execution:</span>
+              <span className="font-mono font-semibold">{result.execution_time.toFixed(2)}s</span>
+            </div>
+          )}
+
+          {/* Issues found count */}
+          {result.results?.issues_found && result.results.issues_found.length > 0 && (
+            <div className="flex items-center justify-between text-[9px] px-1">
+              <span className="text-muted-foreground">Issues:</span>
+              <span className="font-semibold text-red-600 dark:text-red-400">
+                {result.results.issues_found.length} found
+              </span>
+            </div>
+          )}
+
+          {/* Metrics summary */}
+          {result.results?.metrics && result.results.metrics.length > 0 && (
+            <div className="space-y-0.5">
+              {result.results.metrics.slice(0, 2).map((metric: any, idx: number) => (
+                <div key={idx} className="flex items-center justify-between text-[9px] px-1">
+                  <span className="text-muted-foreground truncate flex-1 mr-1">
+                    {metric.name}:
+                  </span>
+                  <span className={`font-mono font-semibold ${
+                    metric.passed ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                  }`}>
+                    {metric.value !== undefined ? `${metric.value}${metric.unit || ''}` : (metric.passed ? '✓' : '✗')}
+                  </span>
+                </div>
+              ))}
+              {result.results.metrics.length > 2 && (
+                <div className="text-[9px] text-muted-foreground text-center">
+                  +{result.results.metrics.length - 2} more
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Recommendations count */}
+          {hasRecommendations && (
+            <div className="flex items-center gap-1 text-[9px] text-amber-700 dark:text-amber-300 px-1 py-1 bg-amber-500/5 rounded">
+              <span>💡</span>
+              <span className="font-semibold">
+                {result.recommendations.length} recommendation{result.recommendations.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+          )}
         </div>
       )}
     </div>

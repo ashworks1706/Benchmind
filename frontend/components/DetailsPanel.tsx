@@ -209,12 +209,12 @@ function CostInfoPopup({ type }: { type: 'agent' | 'tool' | 'connection' }) {
 }
 
 export function DetailsPanel() {
-  const { selectedElement, setSelectedElement, agentData, addStatusMessage } = useStore();
+  const { selectedElement, setSelectedElement } = useStore();
 
   if (!selectedElement) {
     return (
       <div className="h-full flex items-center justify-center p-4">
-        <p className="text-sm text-muted-foreground text-center">
+        <p className="text-sm font-serif text-muted-foreground text-center">
           Click on an agent, tool, relationship, or test to view details
         </p>
       </div>
@@ -223,11 +223,11 @@ export function DetailsPanel() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="p-4 border-b border-border flex items-center justify-between">
-        <h3 className="font-semibold">Details</h3>
+      <div className="p-4 border-b border-border flex items-center justify-between bg-muted/30">
+        <h3 className="font-serif font-bold text-lg">Technical Details</h3>
         <button
           onClick={() => setSelectedElement(null)}
-          className="p-1 hover:bg-muted rounded"
+          className="p-1 hover:bg-muted rounded transition-colors"
         >
           <X className="w-4 h-4" />
         </button>
@@ -252,9 +252,7 @@ export function DetailsPanel() {
 }
 
 function AgentDetails({ agent }: { agent: Agent }) {
-  const [editing, setEditing] = useState(false);
-  const { agentData, addStatusMessage, testingStatus, testReport, errorHighlightedElements, addQueuedChange } = useStore();
-  const [editedAgent, setEditedAgent] = useState(agent);
+  const { agentData, testingStatus, testReport, errorHighlightedElements } = useStore();
 
   const isTestingActive = testingStatus === 'running_tests' || testingStatus === 'generating';
   const hasErrors = errorHighlightedElements.has(agent.id);
@@ -270,42 +268,29 @@ function AgentDetails({ agent }: { agent: Agent }) {
            testCase?.highlight_elements?.includes(agent.id);
   }) || [];
 
-  const handleSave = async () => {
-    try {
-      // Queue the change instead of applying immediately
-      addQueuedChange({
-        type: 'edit',
-        description: `Update agent: ${agent.name}`,
-        data: { agentId: agent.id, updates: editedAgent },
-      });
-      
-      addStatusMessage({
-        type: 'success',
-        message: `Queued update for agent: ${agent.name}`,
-      });
-      setEditing(false);
-    } catch (error: any) {
-      addStatusMessage({
-        type: 'error',
-        message: `Failed to update agent: ${error.message}`,
-      });
-    }
-  };
+  // Calculate cost
+  const cost = calculateAgentCost(agent);
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-6 space-y-6 font-serif">
+      {/* Header */}
+      <div className="border-b-2 border-primary/20 pb-4">
+        <h4 className="font-serif font-bold text-2xl text-foreground mb-1">{agent.name}</h4>
+        <p className="text-sm text-muted-foreground capitalize">{agent.type} Agent</p>
+      </div>
+
       {/* Error Banner */}
       {hasErrors && agentErrors.length > 0 && (
-        <div className="p-3 rounded-lg border-2 border-red-500/50 bg-red-500/10">
-          <h5 className="font-semibold text-red-700 dark:text-red-300 mb-2 flex items-center gap-2">
-            ⚠️ Test Failures Detected
+        <div className="p-4 rounded-lg border-2 border-red-500/50 bg-red-500/10">
+          <h5 className="font-serif font-semibold text-red-700 dark:text-red-300 mb-3">
+            Test Failures Detected
           </h5>
-          <div className="space-y-2">
+          <div className="space-y-3">
             {agentErrors.map((error: any, idx: number) => (
-              <div key={idx} className="text-sm p-2 bg-background/50 rounded">
-                <p className="font-medium">{error.results?.summary}</p>
+              <div key={idx} className="text-sm p-3 bg-background/50 rounded border border-red-500/20">
+                <p className="font-medium mb-1">{error.results?.summary}</p>
                 {error.results?.issues_found && error.results.issues_found.length > 0 && (
-                  <ul className="mt-1 list-disc list-inside text-xs text-muted-foreground">
+                  <ul className="mt-2 list-disc list-inside text-xs text-muted-foreground space-y-1">
                     {error.results.issues_found.map((issue: string, i: number) => (
                       <li key={i}>{issue}</li>
                     ))}
@@ -317,342 +302,255 @@ function AgentDetails({ agent }: { agent: Agent }) {
         </div>
       )}
       
-      <div className="flex items-center justify-between">
-        <h4 className="font-semibold text-lg">{agent.name}</h4>
-        <button
-          onClick={() => (editing ? handleSave() : setEditing(true))}
-          disabled={isTestingActive}
-          className={`px-3 py-1 rounded-md text-sm flex items-center gap-2 ${
-            isTestingActive 
-              ? 'bg-muted text-muted-foreground cursor-not-allowed' 
-              : 'bg-primary text-primary-foreground hover:bg-primary/90'
-          }`}
-        >
-          <Save className="w-4 h-4" />
-          {editing ? 'Save' : 'Edit'}
-        </button>
-      </div>
-      
       {/* Code Location Section */}
-      <div className="p-3 rounded-lg border-2 border-blue-500/30 bg-blue-500/5">
-        <h5 className="font-semibold text-sm text-blue-700 dark:text-blue-300 mb-2 flex items-center gap-2">
-          📍 Code Location
+      <div className="p-4 rounded-lg border border-blue-500/30 bg-blue-500/5">
+        <h5 className="font-serif font-semibold text-sm text-blue-700 dark:text-blue-300 mb-3">
+          Code Location
         </h5>
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">File:</span>
-            <code className="text-xs font-mono bg-background px-2 py-1 rounded">{agent.file_path}</code>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground block mb-1">File Path:</label>
+            <code className="text-xs font-mono bg-background px-3 py-1.5 rounded block">{agent.file_path}</code>
           </div>
           {githubUrl && (
             <a
               href={githubUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+              className="text-sm text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-2 font-sans"
             >
-              🔗 View on GitHub →
+              View Source on GitHub →
             </a>
           )}
+          {agent.code_snippet && (
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground block mb-2">Code Snippet:</label>
+              <pre className="text-xs font-mono bg-background/80 p-3 rounded border border-border overflow-x-auto max-h-64">
+                <code className="language-python">{agent.code_snippet}</code>
+              </pre>
+            </div>
+          )}
         </div>
-        {agent.code_snippet && (
-          <div className="mt-3">
-            <label className="text-xs font-semibold text-muted-foreground block mb-1">Code Snippet:</label>
-            <pre className="text-xs bg-background/80 p-2 rounded border border-border overflow-x-auto">
-              <code className="language-python">{agent.code_snippet}</code>
-            </pre>
-          </div>
-        )}
       </div>
       
       {/* Cost Analysis Section */}
-      {(() => {
-        const cost = calculateAgentCost(agent);
-        return (
-          <div className="p-3 rounded-lg border-2 border-green-500/30 bg-green-500/5">
-            <h5 className="font-semibold text-sm text-green-700 dark:text-green-300 mb-2 flex items-center">
-              💰 Cost Analysis
-              <CostInfoPopup type="agent" />
-            </h5>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Daily Cost:</span>
-                <span className={`text-sm font-mono font-semibold ${getCostColor(cost.totalCost)}`}>
-                  {formatCost(cost.totalCost)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Monthly Cost:</span>
-                <span className={`text-sm font-mono font-semibold ${getCostColor(cost.totalCost * 30)}`}>
-                  {formatCost(cost.totalCost * 30)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Est. API Calls/Day:</span>
-                <span className="text-sm font-mono">{cost.apiCalls}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Model:</span>
-                <span className="text-xs font-mono bg-background px-2 py-0.5 rounded">
-                  {agent.model_config.model}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Avg Input Tokens:</span>
-                <span className="text-xs font-mono">{cost.inputTokens}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Avg Output Tokens:</span>
-                <span className="text-xs font-mono">{cost.outputTokens}</span>
-              </div>
-            </div>
+      <div className="p-4 rounded-lg border border-green-500/30 bg-green-500/5">
+        <h5 className="font-serif font-semibold text-sm text-green-700 dark:text-green-300 mb-3">
+          Cost Analysis
+          <CostInfoPopup type="agent" />
+        </h5>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="p-2 bg-background/50 rounded">
+            <span className="text-xs text-muted-foreground block mb-1">Daily Cost:</span>
+            <span className={`text-base font-serif font-bold ${getCostColor(cost.totalCost)}`}>
+              {formatCost(cost.totalCost)}
+            </span>
           </div>
-        );
-      })()}
-      
-      {isTestingActive && (
-        <div className="p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
-          <p className="text-xs text-yellow-700 dark:text-yellow-300">
-            🔒 Editing disabled during testing
-          </p>
-        </div>
-      )}
-
-      <DetailSection label="Type" value={agent.type} />
-      <DetailSection label="File Path" value={agent.file_path} />
-
-      <div>
-        <label className="text-sm font-medium text-muted-foreground">Prompt</label>
-        {editing ? (
-          <textarea
-            value={editedAgent.prompt}
-            onChange={(e) =>
-              setEditedAgent({ ...editedAgent, prompt: e.target.value })
-            }
-            disabled={isTestingActive}
-            className="w-full mt-1 p-2 border border-border rounded-md bg-background text-sm disabled:opacity-50"
-            rows={4}
-          />
-        ) : (
-          <p className="mt-1 text-sm">{agent.prompt}</p>
-        )}
-      </div>
-
-      <div>
-        <label className="text-sm font-medium text-muted-foreground">System Instruction</label>
-        {editing ? (
-          <textarea
-            value={editedAgent.system_instruction}
-            onChange={(e) =>
-              setEditedAgent({ ...editedAgent, system_instruction: e.target.value })
-            }
-            disabled={isTestingActive}
-            className="w-full mt-1 p-2 border border-border rounded-md bg-background text-sm disabled:opacity-50"
-            rows={4}
-          />
-        ) : (
-          <p className="mt-1 text-sm">{agent.system_instruction}</p>
-        )}
-      </div>
-
-      <DetailSection label="Objective" value={agent.objective} />
-
-      <div>
-        <label className="text-sm font-medium text-muted-foreground">Model Configuration</label>
-        <div className="mt-1 space-y-1 text-sm">
-          <div className="flex justify-between">
-            <span>Model:</span>
-            <span>{agent.model_config.model}</span>
+          <div className="p-2 bg-background/50 rounded">
+            <span className="text-xs text-muted-foreground block mb-1">Monthly Cost:</span>
+            <span className={`text-base font-serif font-bold ${getCostColor(cost.totalCost * 30)}`}>
+              {formatCost(cost.totalCost * 30)}
+            </span>
           </div>
-          <div className="flex justify-between">
-            <span>Temperature:</span>
-            {editing ? (
-              <input
-                type="number"
-                step="0.1"
-                value={editedAgent.model_config.temperature}
-                onChange={(e) =>
-                  setEditedAgent({
-                    ...editedAgent,
-                    model_config: {
-                      ...editedAgent.model_config,
-                      temperature: parseFloat(e.target.value),
-                    },
-                  })
-                }
-                disabled={isTestingActive}
-                className="w-20 px-2 py-0.5 border border-border rounded bg-background disabled:opacity-50"
-              />
-            ) : (
-              <span>{agent.model_config.temperature}</span>
-            )}
+          <div className="p-2 bg-background/50 rounded">
+            <span className="text-xs text-muted-foreground block mb-1">API Calls/Day:</span>
+            <span className="text-sm font-mono font-semibold">{cost.apiCalls}</span>
           </div>
-          <div className="flex justify-between">
-            <span>Max Tokens:</span>
-            {editing ? (
-              <input
-                type="number"
-                value={editedAgent.model_config.max_tokens}
-                onChange={(e) =>
-                  setEditedAgent({
-                    ...editedAgent,
-                    model_config: {
-                      ...editedAgent.model_config,
-                      max_tokens: parseInt(e.target.value),
-                    },
-                  })
-                }
-                disabled={isTestingActive}
-                className="w-20 px-2 py-0.5 border border-border rounded bg-background disabled:opacity-50"
-              />
-            ) : (
-              <span>{agent.model_config.max_tokens}</span>
-            )}
+          <div className="p-2 bg-background/50 rounded">
+            <span className="text-xs text-muted-foreground block mb-1">Model:</span>
+            <span className="text-xs font-mono bg-background px-2 py-0.5 rounded">
+              {agent.model_config.model}
+            </span>
+          </div>
+          <div className="p-2 bg-background/50 rounded">
+            <span className="text-xs text-muted-foreground block mb-1">Input Tokens:</span>
+            <span className="text-sm font-mono">{cost.inputTokens}</span>
+          </div>
+          <div className="p-2 bg-background/50 rounded">
+            <span className="text-xs text-muted-foreground block mb-1">Output Tokens:</span>
+            <span className="text-sm font-mono">{cost.outputTokens}</span>
           </div>
         </div>
       </div>
 
+      {/* Configuration Section */}
+      <div className="space-y-4">
+        <DetailSection label="Objective" value={agent.objective} />
+        
+        <div>
+          <label className="text-sm font-serif font-semibold text-foreground block mb-2">System Instruction</label>
+          <div className="text-sm leading-relaxed text-muted-foreground p-3 bg-muted/30 rounded border border-border max-h-40 overflow-y-auto">
+            {agent.system_instruction}
+          </div>
+        </div>
+
+        <div>
+          <label className="text-sm font-serif font-semibold text-foreground block mb-2">Prompt Template</label>
+          <div className="text-sm leading-relaxed text-muted-foreground p-3 bg-muted/30 rounded border border-border max-h-40 overflow-y-auto">
+            {agent.prompt}
+          </div>
+        </div>
+      </div>
+
+      {/* Model Configuration */}
+      <div className="p-4 rounded-lg border border-border bg-muted/20">
+        <h5 className="font-serif font-semibold text-sm text-foreground mb-3">Model Configuration</h5>
+        <div className="space-y-2 text-sm">
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Model:</span>
+            <span className="font-mono font-semibold">{agent.model_config.model}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Temperature:</span>
+            <span className="font-mono">{agent.model_config.temperature}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Max Tokens:</span>
+            <span className="font-mono">{agent.model_config.max_tokens}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Tools Section */}
       <div>
-        <label className="text-sm font-medium text-muted-foreground">Tools ({agent.tools.length})</label>
-        <ul className="mt-1 text-sm space-y-1">
+        <label className="text-sm font-serif font-semibold text-foreground block mb-3">
+          Available Tools ({agent.tools.length})
+        </label>
+        <div className="space-y-2">
           {agent.tools.map((tool, i) => (
-            <li key={i} className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-blue-500" />
-              {tool}
-            </li>
+            <div key={i} className="flex items-center gap-2 p-2 bg-muted/30 rounded border border-border">
+              <span className="w-2 h-2 rounded-full bg-green-500" />
+              <span className="text-sm font-mono">{tool}</span>
+            </div>
           ))}
-        </ul>
+        </div>
       </div>
     </div>
   );
 }
 
 function ToolDetails({ tool }: { tool: Tool }) {
-  const [editing, setEditing] = useState(false);
-  const [editedCode, setEditedCode] = useState(tool.code);
-  const { addStatusMessage, agentData } = useStore();
+  const { agentData } = useStore();
   
   // Get repository info for GitHub link
   const repoInfo = agentData?.repository;
   const githubUrl = repoInfo ? `https://github.com/${repoInfo.owner}/${repoInfo.repo_name}/blob/main/${tool.file_path}` : null;
 
-  const handleSave = async () => {
-    try {
-      await apiService.updateAgent(tool.id, { code: editedCode });
-      addStatusMessage({
-        type: 'success',
-        message: `Updated tool: ${tool.name}`,
-      });
-      setEditing(false);
-    } catch (error: any) {
-      addStatusMessage({
-        type: 'error',
-        message: `Failed to update tool: ${error.message}`,
-      });
-    }
-  };
+  // Calculate cost
+  const cost = calculateToolCost(tool);
 
   return (
-    <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <h4 className="font-semibold text-lg">{tool.name}</h4>
-        <button
-          onClick={() => (editing ? handleSave() : setEditing(true))}
-          className="px-3 py-1 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-sm flex items-center gap-2"
-        >
-          <Save className="w-4 h-4" />
-          {editing ? 'Save' : 'Edit'}
-        </button>
+    <div className="p-6 space-y-6 font-serif">
+      {/* Header */}
+      <div className="border-b-2 border-primary/20 pb-4">
+        <h4 className="font-serif font-bold text-2xl text-foreground mb-1">{tool.name}</h4>
+        <p className="text-sm text-muted-foreground">Tool Function</p>
       </div>
 
       {/* Code Location Section */}
-      <div className="p-3 rounded-lg border-2 border-green-500/30 bg-green-500/5">
-        <h5 className="font-semibold text-sm text-green-700 dark:text-green-300 mb-2 flex items-center gap-2">
-          📍 Code Location
+      <div className="p-4 rounded-lg border border-green-500/30 bg-green-500/5">
+        <h5 className="font-serif font-semibold text-sm text-green-700 dark:text-green-300 mb-3">
+          Code Location
         </h5>
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">File:</span>
-            <code className="text-xs font-mono bg-background px-2 py-1 rounded">{tool.file_path}</code>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground block mb-1">File Path:</label>
+            <code className="text-xs font-mono bg-background px-3 py-1.5 rounded block">{tool.file_path}</code>
           </div>
           {githubUrl && (
             <a
               href={githubUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-green-600 dark:text-green-400 hover:underline flex items-center gap-1"
+              className="text-sm text-green-600 dark:text-green-400 hover:underline flex items-center gap-2 font-sans"
             >
-              🔗 View on GitHub →
+              View Source on GitHub →
             </a>
           )}
         </div>
       </div>
 
       {/* Cost Analysis Section */}
-      {(() => {
-        const cost = calculateToolCost(tool);
-        return (
-          <div className="p-3 rounded-lg border-2 border-green-500/30 bg-green-500/5">
-            <h5 className="font-semibold text-sm text-green-700 dark:text-green-300 mb-2 flex items-center">
-              💰 Cost Analysis
-              <CostInfoPopup type="tool" />
-            </h5>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Daily Cost:</span>
-                <span className={`text-sm font-mono font-semibold ${getCostColor(cost.totalCost)}`}>
-                  {formatCost(cost.totalCost)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Monthly Cost:</span>
-                <span className={`text-sm font-mono font-semibold ${getCostColor(cost.totalCost * 30)}`}>
-                  {formatCost(cost.totalCost * 30)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Est. Executions/Day:</span>
-                <span className="text-sm font-mono">{cost.apiCalls}</span>
-              </div>
-              <div className="text-xs text-muted-foreground mt-2 p-2 bg-background/50 rounded">
-                💡 Tool costs are minimal (execution overhead only, no LLM calls)
-              </div>
-            </div>
+      <div className="p-4 rounded-lg border border-green-500/30 bg-green-500/5">
+        <h5 className="font-serif font-semibold text-sm text-green-700 dark:text-green-300 mb-3">
+          Cost Analysis
+          <CostInfoPopup type="tool" />
+        </h5>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="p-2 bg-background/50 rounded">
+            <span className="text-xs text-muted-foreground block mb-1">Daily Cost:</span>
+            <span className={`text-base font-serif font-bold ${getCostColor(cost.totalCost)}`}>
+              {formatCost(cost.totalCost)}
+            </span>
           </div>
-        );
-      })()}
-
-      <DetailSection label="Description" value={tool.description} />
-      <DetailSection label="Summary" value={tool.summary} />
-      <DetailSection label="Return Type" value={tool.return_type} />
-
-      <div>
-        <label className="text-sm font-medium text-muted-foreground">Parameters</label>
-        <ul className="mt-1 text-sm space-y-1">
-          {tool.parameters.map((param, i) => (
-            <li key={i} className="flex items-start gap-2">
-              <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">
-                {param.name}: {param.type}
-              </span>
-              <span className="text-muted-foreground">{param.description}</span>
-            </li>
-          ))}
-        </ul>
+          <div className="p-2 bg-background/50 rounded">
+            <span className="text-xs text-muted-foreground block mb-1">Monthly Cost:</span>
+            <span className={`text-base font-serif font-bold ${getCostColor(cost.totalCost * 30)}`}>
+              {formatCost(cost.totalCost * 30)}
+            </span>
+          </div>
+          <div className="col-span-2 p-2 bg-background/50 rounded">
+            <span className="text-xs text-muted-foreground block mb-1">Est. Executions/Day:</span>
+            <span className="text-sm font-mono font-semibold">{cost.apiCalls}</span>
+          </div>
+        </div>
+        <div className="text-xs text-muted-foreground mt-3 p-2 bg-background/50 rounded leading-relaxed">
+          Note: Tool costs are minimal (execution overhead only). Tools typically don't make direct LLM calls.
+        </div>
       </div>
 
+      {/* Description */}
       <div>
-        <label className="text-sm font-medium text-muted-foreground">Code</label>
-        {editing ? (
-          <textarea
-            value={editedCode}
-            onChange={(e) => setEditedCode(e.target.value)}
-            className="w-full mt-1 p-2 border border-border rounded-md bg-background text-xs font-mono"
-            rows={12}
-          />
-        ) : (
-          <pre className="mt-1 text-xs bg-muted p-3 rounded-md overflow-x-auto">
-            <code>{tool.code}</code>
-          </pre>
-        )}
+        <label className="text-sm font-serif font-semibold text-foreground block mb-2">Description</label>
+        <div className="text-sm leading-relaxed text-muted-foreground p-3 bg-muted/30 rounded border border-border">
+          {tool.description}
+        </div>
+      </div>
+
+      {/* Summary */}
+      {tool.summary && (
+        <div>
+          <label className="text-sm font-serif font-semibold text-foreground block mb-2">Summary</label>
+          <div className="text-sm leading-relaxed text-muted-foreground p-3 bg-muted/30 rounded border border-border">
+            {tool.summary}
+          </div>
+        </div>
+      )}
+
+      {/* Return Type */}
+      <div className="p-4 rounded-lg border border-border bg-muted/20">
+        <label className="text-sm font-serif font-semibold text-foreground block mb-2">Return Type</label>
+        <code className="text-sm font-mono">{tool.return_type}</code>
+      </div>
+
+      {/* Parameters */}
+      <div>
+        <label className="text-sm font-serif font-semibold text-foreground block mb-3">
+          Parameters ({tool.parameters.length})
+        </label>
+        <div className="space-y-3">
+          {tool.parameters.map((param, i) => (
+            <div key={i} className="p-3 bg-muted/30 rounded border border-border">
+              <div className="flex items-start gap-2 mb-1">
+                <code className="font-mono text-xs bg-background px-2 py-1 rounded font-semibold">
+                  {param.name}
+                </code>
+                <code className="font-mono text-xs text-muted-foreground">
+                  {param.type}
+                </code>
+              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed">{param.description}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Code Implementation */}
+      <div>
+        <label className="text-sm font-serif font-semibold text-foreground block mb-2">Implementation</label>
+        <pre className="text-xs font-mono bg-background p-4 rounded border border-border overflow-x-auto max-h-96">
+          <code>{tool.code}</code>
+        </pre>
       </div>
     </div>
   );

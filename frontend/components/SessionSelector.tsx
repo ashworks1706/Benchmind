@@ -19,22 +19,24 @@ export const SESSION_COLORS = [
 export function SessionSelector() {
   const { 
     testCollections, 
-    activeCollectionId, 
     visibleSessionIds, 
     toggleSessionVisibility
   } = useStore();
 
   console.log('[SessionSelector] Render - testCollections:', testCollections);
-  console.log('[SessionSelector] activeCollectionId:', activeCollectionId);
 
-  const activeCollection = testCollections.find(c => c.id === activeCollectionId);
-  const sessions = activeCollection?.testSessions || [];
+  // Collect ALL sessions from ALL collections
+  const allSessions = testCollections.flatMap(collection => 
+    (collection.testSessions || []).map(session => ({
+      ...session,
+      collectionName: collection.name,
+    }))
+  );
 
-  console.log('[SessionSelector] Active collection:', activeCollection);
-  console.log('[SessionSelector] Sessions count:', sessions.length);
-  console.log('[SessionSelector] Sessions:', sessions);
+  console.log('[SessionSelector] Total sessions across all collections:', allSessions.length);
+  console.log('[SessionSelector] All sessions:', allSessions);
 
-  if (sessions.length === 0) {
+  if (allSessions.length === 0) {
     console.log('[SessionSelector] No sessions found - hiding component');
     return null;
   }
@@ -44,12 +46,12 @@ export function SessionSelector() {
       <div className="flex items-center gap-2 mb-2">
         <h3 className="text-xs font-bold text-muted-foreground uppercase">Test Sessions</h3>
         <span className="text-xs text-muted-foreground">
-          ({visibleSessionIds.length} of {sessions.length} visible)
+          ({visibleSessionIds.length} of {allSessions.length} visible)
         </span>
       </div>
       
       <div className="flex flex-wrap gap-2">
-        {sessions.map((session, index) => {
+        {allSessions.map((session, index) => {
           const isVisible = visibleSessionIds.includes(session.id);
           const sessionColor = session.color || SESSION_COLORS[index % SESSION_COLORS.length];
           

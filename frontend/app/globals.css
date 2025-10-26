@@ -155,3 +155,67 @@ body {
   left: 0;
   z-index: 0;
 }
+
+/* Custom Range Slider Styles for Objective Focus Panel */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  cursor: pointer;
+  outline: none;
+  overflow: hidden;
+  border-radius: 16px;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 8px;
+  background: #ccc;
+  border-radius: 16px;
+}
+
+input[type="range"]::-moz-range-track {
+  height: 8px;
+  background: #ccc;
+  border-radius: 16px;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 18px;
+  width: 18px;
+  background-color: #fff;
+  border-radius: 50%;
+  border: 2px solid hsl(var(--primary));
+  box-shadow: -407px 0 0 400px hsl(var(--primary));
+  transition: 0.2s ease-in-out;
+}
+
+input[type="range"]::-moz-range-thumb {
+  height: 18px;
+  width: 18px;
+  background-color: #fff;
+  border-radius: 50%;
+  border: 2px solid hsl(var(--primary));
+  box-shadow: -407px 0 0 400px hsl(var(--primary));
+  transition: 0.2s ease-in-out;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  box-shadow: -407px 0 0 400px hsl(var(--primary) / 0.8);
+}
+
+input[type="range"]::-moz-range-thumb:hover {
+  box-shadow: -407px 0 0 400px hsl(var(--primary) / 0.8);
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+  input[type="range"]::-webkit-slider-runnable-track {
+    background: #444;
+  }
+  
+  input[type="range"]::-moz-range-track {
+    background: #444;
+  }
+}
