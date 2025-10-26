@@ -515,7 +515,14 @@ IMPORTANT for highlight_elements:
         
         # Initialize framework if not already done
         if not self.test_framework:
-            self.test_framework = AgentTestFramework(agent_data)
+            # If we don't have a framework definition, create a minimal one
+            if not self.framework_definition:
+                self.framework_definition = {
+                    'framework_name': 'Minimal Test Framework',
+                    'performance_benchmarks': {},
+                    'test_categories': []
+                }
+            self.test_framework = AgentTestFramework(agent_data, self.framework_definition)
         
         if progress_callback:
             progress_callback("test_started", {
@@ -836,6 +843,9 @@ Return the COMPLETE updated test suite as JSON array with the same structure:
         Returns:
             Report with statistics, graphs data, and recommendations
         """
+        # Generate collection name and description using AI
+        collection_name, collection_description = self._generate_collection_name(test_results, agent_data)
+        
         total_tests = len(test_results)
         passed = sum(1 for r in test_results if r.get('status') == 'passed')
         failed = sum(1 for r in test_results if r.get('status') == 'failed')
@@ -898,6 +908,8 @@ Return the COMPLETE updated test suite as JSON array with the same structure:
                     critical_issues.append(rec)
         
         return {
+            'collection_name': collection_name,
+            'collection_description': collection_description,
             'summary': {
                 'total_tests': total_tests,
                 'passed': passed,
@@ -933,5 +945,60 @@ Return the COMPLETE updated test suite as JSON array with the same structure:
                     'labels': [p['name'] for p in agent_performance.values()],
                     'values': [p['average_score'] for p in agent_performance.values()]
                 }
-            }
+            },
+            'test_results': test_results  # Include full test results for detailed view
         }
+    
+    def _generate_collection_name(
+        self,
+        test_results: List[Dict[str, Any]],
+        agent_data: Dict[str, Any]
+    ) -> tuple[str, str]:
+        """
+        Generate a descriptive collection name and description using AI
+        
+        Returns:
+            Tuple of (collection_name, collection_description)
+        """
+        # Collect test categories and agent names
+        categories = set()
+        agent_names = [agent.get('name', '') for agent in agent_data.get('agents', [])]
+        
+        for result in test_results:
+            if 'category' in result:
+                categories.add(result.get('category', ''))
+        
+        categories_list = list(categories)
+        
+        prompt = f"""
+Generate a concise, professional collection name and description for this test suite.
+
+Agent Names: {', '.join(agent_names[:3])}
+Test Categories: {', '.join(categories_list)}
+Total Tests: {len(test_results)}
+
+Return a JSON object with exactly this format:
+{{
+    "name": "A 3-6 word professional test suite name",
+    "description": "A 10-15 word concise description"
+}}
+
+Examples:
+- "Agent Integration & Security Suite" - "Comprehensive evaluation of tool calling, authentication, and system security"
+- "Performance & Reliability Assessment" - "Benchmark testing for response time, throughput, and error handling"
+"""
+
+        try:
+            response = self.model.generate_content(prompt)
+            text = response.text.strip()
+            
+            # Extract JSON from response
+            json_match = re.search(r'\{[^}]+\}', text, re.DOTALL)
+            if json_match:
+                data = json.loads(json_match.group())
+                return data.get('name', 'AI Agent Test Suite'), data.get('description', 'Comprehensive system evaluation')
+        except Exception as e:
+            print(f"Error generating collection name: {e}")
+        
+        # Fallback names
+        return 'AI Agent Test Suite', 'Comprehensive system evaluation'

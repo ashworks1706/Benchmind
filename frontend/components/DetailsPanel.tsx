@@ -58,6 +58,10 @@ function AgentDetails({ agent }: { agent: Agent }) {
   const isTestingActive = testingStatus === 'running_tests' || testingStatus === 'generating';
   const hasErrors = errorHighlightedElements.has(agent.id);
   
+  // Get repository info for GitHub link
+  const repoInfo = agentData?.repository;
+  const githubUrl = repoInfo ? `https://github.com/${repoInfo.owner}/${repoInfo.repo_name}/blob/master/${agent.file_path}` : null;
+  
   // Find errors related to this agent from test report
   const agentErrors = testReport?.test_results?.filter((result: any) => {
     const testCase = testReport.test_cases?.find((tc: any) => tc.id === result.test_id);
@@ -126,6 +130,37 @@ function AgentDetails({ agent }: { agent: Agent }) {
           <Save className="w-4 h-4" />
           {editing ? 'Save' : 'Edit'}
         </button>
+      </div>
+      
+      {/* Code Location Section */}
+      <div className="p-3 rounded-lg border-2 border-blue-500/30 bg-blue-500/5">
+        <h5 className="font-semibold text-sm text-blue-700 dark:text-blue-300 mb-2 flex items-center gap-2">
+          📍 Code Location
+        </h5>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">File:</span>
+            <code className="text-xs font-mono bg-background px-2 py-1 rounded">{agent.file_path}</code>
+          </div>
+          {githubUrl && (
+            <a
+              href={githubUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+            >
+              🔗 View on GitHub →
+            </a>
+          )}
+        </div>
+        {agent.code_snippet && (
+          <div className="mt-3">
+            <label className="text-xs font-semibold text-muted-foreground block mb-1">Code Snippet:</label>
+            <pre className="text-xs bg-background/80 p-2 rounded border border-border overflow-x-auto">
+              <code className="language-python">{agent.code_snippet}</code>
+            </pre>
+          </div>
+        )}
       </div>
       
       {isTestingActive && (
@@ -248,7 +283,11 @@ function AgentDetails({ agent }: { agent: Agent }) {
 function ToolDetails({ tool }: { tool: Tool }) {
   const [editing, setEditing] = useState(false);
   const [editedCode, setEditedCode] = useState(tool.code);
-  const { addStatusMessage } = useStore();
+  const { addStatusMessage, agentData } = useStore();
+  
+  // Get repository info for GitHub link
+  const repoInfo = agentData?.repository;
+  const githubUrl = repoInfo ? `https://github.com/${repoInfo.owner}/${repoInfo.repo_name}/blob/main/${tool.file_path}` : null;
 
   const handleSave = async () => {
     try {
@@ -279,7 +318,29 @@ function ToolDetails({ tool }: { tool: Tool }) {
         </button>
       </div>
 
-      <DetailSection label="File Path" value={tool.file_path} />
+      {/* Code Location Section */}
+      <div className="p-3 rounded-lg border-2 border-green-500/30 bg-green-500/5">
+        <h5 className="font-semibold text-sm text-green-700 dark:text-green-300 mb-2 flex items-center gap-2">
+          📍 Code Location
+        </h5>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">File:</span>
+            <code className="text-xs font-mono bg-background px-2 py-1 rounded">{tool.file_path}</code>
+          </div>
+          {githubUrl && (
+            <a
+              href={githubUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-green-600 dark:text-green-400 hover:underline flex items-center gap-1"
+            >
+              🔗 View on GitHub →
+            </a>
+          )}
+        </div>
+      </div>
+
       <DetailSection label="Description" value={tool.description} />
       <DetailSection label="Summary" value={tool.summary} />
       <DetailSection label="Return Type" value={tool.return_type} />
@@ -322,16 +383,90 @@ function RelationshipDetails({ relationship }: { relationship: Relationship }) {
 
   const fromAgent = agentData?.agents.find((a) => a.id === relationship.from_agent_id);
   const toAgent = agentData?.agents.find((a) => a.id === relationship.to_agent_id);
+  
+  // Get repository info for GitHub links
+  const repoInfo = agentData?.repository;
+  const fromGithubUrl = repoInfo && fromAgent ? `https://github.com/${repoInfo.owner}/${repoInfo.repo_name}/blob/main/${fromAgent.file_path}` : null;
+  const toGithubUrl = repoInfo && toAgent ? `https://github.com/${repoInfo.owner}/${repoInfo.repo_name}/blob/main/${toAgent.file_path}` : null;
 
   return (
     <div className="p-4 space-y-4">
       <h4 className="font-semibold text-lg">Relationship</h4>
 
       <DetailSection label="Type" value={relationship.type} />
-      <DetailSection label="From Agent" value={fromAgent?.name || 'Unknown'} />
-      <DetailSection label="To Agent" value={toAgent?.name || 'Unknown'} />
       <DetailSection label="Description" value={relationship.description} />
       <DetailSection label="Data Flow" value={relationship.data_flow} />
+      
+      {/* From Agent Location */}
+      <div className="p-3 rounded-lg border-2 border-red-500/30 bg-red-500/5">
+        <h5 className="font-semibold text-sm text-red-700 dark:text-red-300 mb-2 flex items-center gap-2">
+          🔴 From Agent: {fromAgent?.name || 'Unknown'}
+        </h5>
+        {fromAgent && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">File:</span>
+              <code className="text-xs font-mono bg-background px-2 py-1 rounded">{fromAgent.file_path}</code>
+            </div>
+            {fromGithubUrl && (
+              <a
+                href={fromGithubUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-red-600 dark:text-red-400 hover:underline flex items-center gap-1"
+              >
+                🔗 View on GitHub →
+              </a>
+            )}
+            {fromAgent.code_snippet && (
+              <div className="mt-2">
+                <label className="text-xs font-semibold text-muted-foreground block mb-1">Code:</label>
+                <pre className="text-xs bg-background/80 p-2 rounded border border-border overflow-x-auto max-h-32">
+                  <code className="language-python">{fromAgent.code_snippet}</code>
+                </pre>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      
+      {/* Connection Indicator */}
+      <div className="flex items-center justify-center text-2xl">
+        ⬇️
+      </div>
+      
+      {/* To Agent Location */}
+      <div className="p-3 rounded-lg border-2 border-blue-500/30 bg-blue-500/5">
+        <h5 className="font-semibold text-sm text-blue-700 dark:text-blue-300 mb-2 flex items-center gap-2">
+          🔵 To Agent: {toAgent?.name || 'Unknown'}
+        </h5>
+        {toAgent && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">File:</span>
+              <code className="text-xs font-mono bg-background px-2 py-1 rounded">{toAgent.file_path}</code>
+            </div>
+            {toGithubUrl && (
+              <a
+                href={toGithubUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+              >
+                🔗 View on GitHub →
+              </a>
+            )}
+            {toAgent.code_snippet && (
+              <div className="mt-2">
+                <label className="text-xs font-semibold text-muted-foreground block mb-1">Code:</label>
+                <pre className="text-xs bg-background/80 p-2 rounded border border-border overflow-x-auto max-h-32">
+                  <code className="language-python">{toAgent.code_snippet}</code>
+                </pre>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { useStore } from '@/lib/store';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
+import { generateCompleteLatexReport } from '@/lib/latexGenerator';
 import { 
   BarChart3, 
   TrendingUp, 
@@ -18,7 +19,10 @@ import {
   Info,
   Activity,
   Target,
-  Award
+  Award,
+  FileText,
+  Download,
+  Copy
 } from 'lucide-react';
 import { useState } from 'react';
 import { useEffect } from 'react';
@@ -721,6 +725,261 @@ export default function TestReportPanel() {
               </div>
             </div>
           )}
+          
+          {/* LaTeX-Style Benchmark Table */}
+          {testReport.test_results && testReport.test_results.length > 0 && (
+            <div className="p-4 rounded-lg border border-border bg-card">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="font-semibold flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  Benchmark Results Table (Research Format)
+                </h4>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const latex = generateCompleteLatexReport(testReport);
+                      navigator.clipboard.writeText(latex);
+                      addStatusMessage({
+                        type: 'success',
+                        message: '📄 LaTeX code copied to clipboard!',
+                      });
+                    }}
+                  >
+                    <Copy className="w-3 h-3 mr-1" />
+                    Copy LaTeX
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      const latex = generateCompleteLatexReport(testReport);
+                      const blob = new Blob([latex], { type: 'text/plain' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'benchmark-report.tex';
+                      a.click();
+                      URL.revokeObjectURL(url);
+                      addStatusMessage({
+                        type: 'success',
+                        message: '⬇️ LaTeX report downloaded!',
+                      });
+                    }}
+                  >
+                    <Download className="w-3 h-3 mr-1" />
+                    Download .tex
+                  </Button>
+                </div>
+              </div>
+
+              {/* Professional Research Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b-2 border-primary">
+                      <th className="text-left p-2 font-bold">Test Case</th>
+                      <th className="text-left p-2 font-bold">Category</th>
+                      <th className="text-left p-2 font-bold">Target</th>
+                      <th className="text-left p-2 font-bold">Metric</th>
+                      <th className="text-right p-2 font-bold">Measured</th>
+                      <th className="text-right p-2 font-bold">Benchmark</th>
+                      <th className="text-right p-2 font-bold">Δ (%)</th>
+                      <th className="text-center p-2 font-bold">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {testReport.test_results.map((result: any, resultIdx: number) => {
+                      const testName = result.test_name || result.test_id || `Test ${resultIdx + 1}`;
+                      const category = result.category || 'General';
+                      const target = result.target || 'System';
+                      
+                      return result.metrics?.map((metric: any, metricIdx: number) => {
+                        const deviation = metric.benchmark > 0 
+                          ? ((metric.value - metric.benchmark) / metric.benchmark * 100) 
+                          : 0;
+                        const statusSymbol = metric.passed ? '✓' : '✗';
+                        const statusColor = metric.passed 
+                          ? 'text-green-600 dark:text-green-400' 
+                          : 'text-red-600 dark:text-red-400';
+                        
+                        return (
+                          <tr 
+                            key={`${resultIdx}-${metricIdx}`}
+                            className="border-b border-border hover:bg-muted/50 transition-colors"
+                          >
+                            <td className="p-2 font-mono text-xs">{testName}</td>
+                            <td className="p-2">
+                              <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium">
+                                {category}
+                              </span>
+                            </td>
+                            <td className="p-2 font-medium">{target}</td>
+                            <td className="p-2 text-muted-foreground">{metric.name}</td>
+                            <td className="p-2 text-right font-semibold">
+                              {metric.value.toFixed(1)}{metric.unit}
+                            </td>
+                            <td className="p-2 text-right text-muted-foreground">
+                              {metric.benchmark}{metric.unit}
+                            </td>
+                            <td className={`p-2 text-right font-bold ${
+                              deviation >= 0 ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'
+                            }`}>
+                              {deviation >= 0 ? '+' : ''}{deviation.toFixed(1)}%
+                            </td>
+                            <td className={`p-2 text-center text-lg ${statusColor}`}>
+                              {statusSymbol}
+                            </td>
+                          </tr>
+                        );
+                      }) || [];
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mathematical Formulation Section */}
+              <div className="mt-6 p-4 bg-muted/50 rounded-lg space-y-3">
+                <h5 className="font-semibold text-sm flex items-center gap-2">
+                  <span className="text-lg">∑</span>
+                  Mathematical Formulation
+                </h5>
+                <div className="space-y-2 text-xs text-muted-foreground">
+                  <div className="font-mono bg-background p-3 rounded border border-border">
+                    <p className="mb-2">Performance deviation metric <strong>Δ</strong> is calculated as:</p>
+                    <p className="text-center text-sm my-2">
+                      <strong>Δ = ((M - B) / B) × 100%</strong>
+                    </p>
+                    <p className="text-xs">
+                      where <strong>M</strong> is the measured value and <strong>B</strong> is the benchmark value.
+                    </p>
+                  </div>
+                  <div className="font-mono bg-background p-3 rounded border border-border">
+                    <p className="mb-2">Overall system performance score <strong>S</strong>:</p>
+                    <p className="text-center text-sm my-2">
+                      <strong>S = (1/N) Σ w<sub>i</sub> · min(M<sub>i</sub>/B<sub>i</sub>, 1.5)</strong>
+                    </p>
+                    <p className="text-xs">
+                      where <strong>N</strong> = number of tests, <strong>w<sub>i</sub></strong> = category weights,
+                      capped at 1.5 to prevent outliers.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Summary Statistics */}
+              <div className="mt-4 p-4 bg-blue-500/5 border border-blue-500/20 rounded-lg">
+                <h5 className="font-semibold text-sm mb-3 text-blue-700 dark:text-blue-300">
+                  📊 Statistical Summary
+                </h5>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                  <div>
+                    <p className="text-muted-foreground mb-1">Total Tests</p>
+                    <p className="text-2xl font-bold">{testReport.summary.total_tests}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground mb-1">Passed</p>
+                    <p className="text-2xl font-bold text-green-600">
+                      {testReport.summary.passed}
+                      <span className="text-xs ml-1">
+                        ({((testReport.summary.passed / testReport.summary.total_tests) * 100).toFixed(1)}%)
+                      </span>
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground mb-1">Failed</p>
+                    <p className="text-2xl font-bold text-red-600">
+                      {testReport.summary.failed}
+                      <span className="text-xs ml-1">
+                        ({((testReport.summary.failed / testReport.summary.total_tests) * 100).toFixed(1)}%)
+                      </span>
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground mb-1">Success Rate</p>
+                    <p className="text-2xl font-bold text-primary">
+                      {testReport.summary.success_rate}%
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Key Findings */}
+              <div className="mt-4 p-4 bg-amber-500/5 border border-amber-500/20 rounded-lg">
+                <h5 className="font-semibold text-sm mb-3 flex items-center gap-2 text-amber-700 dark:text-amber-300">
+                  <Award className="w-4 h-4" />
+                  Key Findings
+                </h5>
+                <ul className="space-y-2 text-xs">
+                  {testReport.category_performance && testReport.category_performance.length > 0 && (
+                    <>
+                      <li className="flex items-start gap-2">
+                        <span className="text-green-600 dark:text-green-400 mt-0.5">▸</span>
+                        <span>
+                          <strong>Best Performing Category:</strong>{' '}
+                          {testReport.category_performance
+                            .sort((a: any, b: any) => b.average_score - a.average_score)[0]
+                            ?.category.replace('_', ' ')} (avg: {testReport.category_performance
+                            .sort((a: any, b: any) => b.average_score - a.average_score)[0]
+                            ?.average_score.toFixed(1)})
+                        </span>
+                      </li>
+                      {testReport.category_performance.some((cat: any) => cat.average_score < cat.benchmark) && (
+                        <li className="flex items-start gap-2">
+                          <span className="text-orange-600 dark:text-orange-400 mt-0.5">▸</span>
+                          <span>
+                            <strong>Needs Improvement:</strong>{' '}
+                            {testReport.category_performance
+                              .filter((cat: any) => cat.average_score < cat.benchmark)
+                              .map((cat: any) => cat.category.replace('_', ' '))
+                              .join(', ')}
+                          </span>
+                        </li>
+                      )}
+                    </>
+                  )}
+                  {testReport.critical_issues && testReport.critical_issues.length > 0 && (
+                    <li className="flex items-start gap-2">
+                      <span className="text-red-600 dark:text-red-400 mt-0.5">▸</span>
+                      <span>
+                        <strong>Critical Issues:</strong> {testReport.critical_issues.length} test(s) 
+                        require immediate attention
+                      </span>
+                    </li>
+                  )}
+                  {testReport.test_results?.filter((r: any) => 
+                    r.metrics?.some((m: any) => m.passed && ((m.value - m.benchmark) / m.benchmark) > 0.1)
+                  ).length > 0 && (
+                    <li className="flex items-start gap-2">
+                      <span className="text-blue-600 dark:text-blue-400 mt-0.5">▸</span>
+                      <span>
+                        <strong>Exceptional Performance:</strong>{' '}
+                        {testReport.test_results.filter((r: any) => 
+                          r.metrics?.some((m: any) => m.passed && ((m.value - m.benchmark) / m.benchmark) > 0.1)
+                        ).length} test(s) exceeded benchmark by {'>'}10%
+                      </span>
+                    </li>
+                  )}
+                </ul>
+              </div>
+
+              {/* References Section */}
+              <div className="mt-4 p-4 bg-purple-500/5 border border-purple-500/20 rounded-lg">
+                <h5 className="font-semibold text-sm mb-3 text-purple-700 dark:text-purple-300">
+                  📚 References & Citations
+                </h5>
+                <ul className="space-y-1 text-xs text-muted-foreground">
+                  <li>• Wei et al. (2022). Chain-of-Thought Prompting Elicits Reasoning in Large Language Models.</li>
+                  <li>• Yao et al. (2023). ReAct: Synergizing Reasoning and Acting in Language Models.</li>
+                  <li>• Wu et al. (2023). AutoGen: Enabling Next-Gen LLM Applications via Multi-Agent Conversation.</li>
+                  <li>• Qin et al. (2023). ToolLLM: Facilitating Large Language Models to Master 16000+ Real-world APIs.</li>
+                  <li>• OWASP Top 10 for LLM Applications (2024).</li>
+                  <li>• OpenAI API Performance Guidelines (2024).</li>
+                  <li>• Anthropic Claude Performance Benchmarks (2024).</li>
+                </ul>
+              </div>
+            </div>
+          )}
 
           {/* All Recommendations */}
           {testReport.recommendations && testReport.recommendations.length > 0 && (
@@ -812,6 +1071,83 @@ export default function TestReportPanel() {
               })}
             </div>
           )}
+          
+          {/* LaTeX Export Section - Research-Level Documentation */}
+          <div className="p-4 rounded-lg border-2 border-blue-500/30 bg-blue-500/5 space-y-3">
+            <div className="flex items-center gap-2 mb-2">
+              <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              <h4 className="font-semibold text-blue-700 dark:text-blue-300">
+                Research-Level Documentation
+              </h4>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Export professional LaTeX tables and complete report for academic papers, research documentation, or technical presentations.
+            </p>
+            
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  try {
+                    const latex = generateCompleteLatexReport(testReport);
+                    navigator.clipboard.writeText(latex);
+                    addStatusMessage({
+                      type: 'success',
+                      message: '📄 LaTeX report copied to clipboard! Paste into Overleaf or your LaTeX editor.',
+                    });
+                  } catch (error) {
+                    addStatusMessage({
+                      type: 'error',
+                      message: 'Failed to copy LaTeX to clipboard',
+                    });
+                  }
+                }}
+                className="flex-1"
+              >
+                <Copy className="w-4 h-4 mr-2" />
+                Copy LaTeX Code
+              </Button>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  try {
+                    const latex = generateCompleteLatexReport(testReport);
+                    const blob = new Blob([latex], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `ai-agent-test-report-${new Date().toISOString().split('T')[0]}.tex`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    addStatusMessage({
+                      type: 'success',
+                      message: '⬇️ LaTeX report downloaded successfully!',
+                    });
+                  } catch (error) {
+                    addStatusMessage({
+                      type: 'error',
+                      message: 'Failed to download LaTeX report',
+                    });
+                  }
+                }}
+                className="flex-1"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Download .tex File
+              </Button>
+            </div>
+            
+            <div className="text-xs text-muted-foreground space-y-1 pt-2 border-t">
+              <p>📊 Includes: Benchmark tables, performance analysis, mathematical formulations</p>
+              <p>📚 Citations: Academic papers (Wei et al., Yao et al., Wu et al., OWASP)</p>
+              <p>✅ Ready to compile in Overleaf, TeXShop, or any LaTeX editor</p>
+            </div>
+          </div>
         </div>
       </ScrollArea>
     </div>

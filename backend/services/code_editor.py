@@ -152,14 +152,14 @@ class CodeEditor:
         agent_data: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Apply multiple fixes in a single commit to GitHub
+        Apply multiple fixes in a single commit via Pull Request
         
         Args:
             fixes: List of fix suggestions
             agent_data: Full agent data context
             
         Returns:
-            Result of applying all fixes
+            Result of creating PR with all fixes
         """
         if not self.github_token or not agent_data.get('repository'):
             return {
@@ -174,98 +174,14 @@ class CodeEditor:
         if not all([owner, repo_name]):
             return {'error': 'Missing repository information'}
         
-        # GitHub API headers
-        headers = {
-            'Authorization': f'token {self.github_token}',
-            'Accept': 'application/vnd.github.v3+json',
-        }
-        
-        # Group fixes by file
-        files_to_update = {}
-        for fix in fixes:
-            file_path = fix.get('file_path')
-            if file_path not in files_to_update:
-                files_to_update[file_path] = []
-            files_to_update[file_path].append(fix)
-        
-        updated_files = []
-        errors = []
-        
-        # Process each file
-        for file_path, file_fixes in files_to_update.items():
-            try:
-                # Get current file content
-                file_url = f'https://api.github.com/repos/{owner}/{repo_name}/contents/{file_path}'
-                response = requests.get(file_url, headers=headers)
-                
-                if response.status_code != 200:
-                    errors.append(f'{file_path}: Failed to fetch')
-                    continue
-                
-                file_data = response.json()
-                
-                # Decode base64 content
-                import base64
-                decoded_content = base64.b64decode(file_data['content']).decode('utf-8')
-                new_content = decoded_content
-                
-                # Apply all fixes to this file
-                for fix in file_fixes:
-                    current_code = fix.get('current_code', '')
-                    suggested_code = fix.get('suggested_code', '')
-                    
-                    if current_code.strip() in new_content:
-                        new_content = new_content.replace(current_code.strip(), suggested_code.strip())
-                    else:
-                        # Try line-based replacement
-                        lines = new_content.split('\n')
-                        line_num = fix.get('line_number', 0)
-                        if 0 < line_num <= len(lines):
-                            lines[line_num - 1] = suggested_code.strip()
-                            new_content = '\n'.join(lines)
-                
-                # Encode new content
-                new_content_encoded = base64.b64encode(new_content.encode('utf-8')).decode('utf-8')
-                
-                # Create commit message
-                commit_message = f"🤖 Auto-fix: Applied {len(file_fixes)} fix{'es' if len(file_fixes) > 1 else ''} to {file_path}"
-                
-                # Update file on GitHub
-                update_data = {
-                    'message': commit_message,
-                    'content': new_content_encoded,
-                    'sha': file_data['sha'],
-                }
-                
-                update_response = requests.put(file_url, headers=headers, json=update_data)
-                
-                if update_response.status_code in [200, 201]:
-                    result = update_response.json()
-                    updated_files.append({
-                        'file': file_path,
-                        'fixes_applied': len(file_fixes),
-                        'commit_sha': result['commit']['sha'],
-                        'commit_url': result['commit']['html_url']
-                    })
-                else:
-                    errors.append(f'{file_path}: {update_response.json().get("message", "Unknown error")}')
-                    
-            except Exception as e:
-                errors.append(f'{file_path}: {str(e)}')
-        
-        return {
-            'success': len(errors) == 0,
-            'files_updated': len(updated_files),
-            'total_fixes': len(fixes),
-            'updated_files': updated_files,
-            'errors': errors
-        }
+        # Use the PR creation method
+        return self.create_pull_request_with_fixes(fixes, repo_info)
     
     def create_pull_request_with_fixes(
         self,
         fixes: List[Dict[str, Any]],
         repo_info: Dict[str, str],
-        branch_name: str = 'auto-fixes'
+        branch_name: str = None
     ) -> Dict[str, Any]:
         """
         Create a pull request with multiple fixes
@@ -273,18 +189,199 @@ class CodeEditor:
         Args:
             fixes: List of fixes to apply
             repo_info: Repository information
-            branch_name: Name of the branch to create
+            branch_name: Name of the branch to create (auto-generated if None)
             
         Returns:
             PR creation result
         """
-        # This would create a new branch and PR with all fixes
-        # For now, return a placeholder
-        return {
-            'status': 'not_implemented',
-            'message': 'PR creation coming soon',
-            'fixes_count': len(fixes)
+        import base64
+        from datetime import datetime
+        
+        owner = repo_info.get('owner')
+        repo_name = repo_info.get('repo_name')
+        
+        if not all([owner, repo_name, self.github_token]):
+            return {'error': 'Missing repository information or GitHub token'}
+        
+        # Generate branch name if not provided
+        if not branch_name:
+            timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+            branch_name = f'copilot-fixes-{timestamp}'
+        
+        # GitHub API headers
+        headers = {
+            'Authorization': f'token {self.github_token}',
+            'Accept': 'application/vnd.github.v3+json',
         }
+        
+        try:
+            # Step 1: Get the default branch and its SHA
+            repo_url = f'https://api.github.com/repos/{owner}/{repo_name}'
+            repo_response = requests.get(repo_url, headers=headers)
+            if repo_response.status_code != 200:
+                return {'error': f'Failed to get repository: {repo_response.json().get("message")}'}
+            
+            default_branch = repo_response.json()['default_branch']
+            
+            # Get the SHA of the default branch
+            ref_url = f'https://api.github.com/repos/{owner}/{repo_name}/git/refs/heads/{default_branch}'
+            ref_response = requests.get(ref_url, headers=headers)
+            if ref_response.status_code != 200:
+                return {'error': f'Failed to get branch reference: {ref_response.json().get("message")}'}
+            
+            base_sha = ref_response.json()['object']['sha']
+            
+            # Step 2: Create a new branch
+            create_ref_url = f'https://api.github.com/repos/{owner}/{repo_name}/git/refs'
+            create_ref_data = {
+                'ref': f'refs/heads/{branch_name}',
+                'sha': base_sha
+            }
+            create_ref_response = requests.post(create_ref_url, headers=headers, json=create_ref_data)
+            
+            if create_ref_response.status_code not in [200, 201]:
+                error_msg = create_ref_response.json().get('message', 'Unknown error')
+                # If branch already exists, try to delete and recreate
+                if 'already exists' in error_msg:
+                    delete_ref_url = f'https://api.github.com/repos/{owner}/{repo_name}/git/refs/heads/{branch_name}'
+                    requests.delete(delete_ref_url, headers=headers)
+                    create_ref_response = requests.post(create_ref_url, headers=headers, json=create_ref_data)
+                    if create_ref_response.status_code not in [200, 201]:
+                        return {'error': f'Failed to create branch: {error_msg}'}
+            
+            # Step 3: Group fixes by file and apply them
+            files_to_update = {}
+            for fix in fixes:
+                file_path = fix.get('file_path')
+                if file_path not in files_to_update:
+                    files_to_update[file_path] = []
+                files_to_update[file_path].append(fix)
+            
+            updated_files = []
+            errors = []
+            
+            # Process each file
+            for file_path, file_fixes in files_to_update.items():
+                try:
+                    # Get current file content from the new branch
+                    file_url = f'https://api.github.com/repos/{owner}/{repo_name}/contents/{file_path}?ref={branch_name}'
+                    response = requests.get(file_url, headers=headers)
+                    
+                    if response.status_code != 200:
+                        errors.append(f'{file_path}: Failed to fetch')
+                        continue
+                    
+                    file_data = response.json()
+                    
+                    # Decode base64 content
+                    decoded_content = base64.b64decode(file_data['content']).decode('utf-8')
+                    new_content = decoded_content
+                    
+                    # Apply all fixes to this file
+                    for fix in file_fixes:
+                        current_code = fix.get('current_code', '')
+                        suggested_code = fix.get('suggested_code', '')
+                        
+                        if current_code.strip() in new_content:
+                            new_content = new_content.replace(current_code.strip(), suggested_code.strip())
+                        else:
+                            # Try line-based replacement
+                            lines = new_content.split('\n')
+                            line_num = fix.get('line_number', 0)
+                            if 0 < line_num <= len(lines):
+                                lines[line_num - 1] = suggested_code.strip()
+                                new_content = '\n'.join(lines)
+                    
+                    # Encode new content
+                    new_content_encoded = base64.b64encode(new_content.encode('utf-8')).decode('utf-8')
+                    
+                    # Create commit message for this file
+                    commit_message = f"🤖 Apply {len(file_fixes)} fix{'es' if len(file_fixes) > 1 else ''} to {file_path}"
+                    
+                    # Update file on the new branch
+                    update_data = {
+                        'message': commit_message,
+                        'content': new_content_encoded,
+                        'sha': file_data['sha'],
+                        'branch': branch_name
+                    }
+                    
+                    update_response = requests.put(
+                        f'https://api.github.com/repos/{owner}/{repo_name}/contents/{file_path}',
+                        headers=headers,
+                        json=update_data
+                    )
+                    
+                    if update_response.status_code in [200, 201]:
+                        updated_files.append({
+                            'file': file_path,
+                            'fixes_applied': len(file_fixes)
+                        })
+                    else:
+                        errors.append(f'{file_path}: {update_response.json().get("message", "Unknown error")}')
+                        
+                except Exception as e:
+                    errors.append(f'{file_path}: {str(e)}')
+            
+            if not updated_files:
+                return {
+                    'error': 'No files were successfully updated',
+                    'details': errors
+                }
+            
+            # Step 4: Create Pull Request
+            pr_title = f"🤖 Copilot AI Agent Fixes - {len(fixes)} improvements"
+            pr_body = f"""## 🤖 Automated Code Improvements
+
+This PR contains **{len(fixes)} fix{'es' if len(fixes) > 1 else ''}** across **{len(updated_files)} file{'s' if len(updated_files) > 1 else ''}** identified by Copilot AI Agent analysis.
+
+### Files Modified:
+"""
+            for file_info in updated_files:
+                pr_body += f"- `{file_info['file']}` - {file_info['fixes_applied']} fix{'es' if file_info['fixes_applied'] > 1 else ''}\n"
+            
+            pr_body += f"""
+### Summary:
+These changes improve code quality, performance, and maintainability based on AI agent analysis.
+
+---
+*Generated by Copilot AI Agent Benchmark Tool*
+"""
+            
+            pr_url = f'https://api.github.com/repos/{owner}/{repo_name}/pulls'
+            pr_data = {
+                'title': pr_title,
+                'body': pr_body,
+                'head': branch_name,
+                'base': default_branch
+            }
+            
+            pr_response = requests.post(pr_url, headers=headers, json=pr_data)
+            
+            if pr_response.status_code in [200, 201]:
+                pr_result = pr_response.json()
+                return {
+                    'success': True,
+                    'pr_number': pr_result['number'],
+                    'pr_url': pr_result['html_url'],
+                    'branch': branch_name,
+                    'files_updated': len(updated_files),
+                    'total_fixes': len(fixes),
+                    'updated_files': updated_files,
+                    'errors': errors if errors else None
+                }
+            else:
+                return {
+                    'error': f'Failed to create PR: {pr_response.json().get("message")}',
+                    'branch_created': branch_name,
+                    'files_updated': updated_files
+                }
+                
+        except Exception as e:
+            return {
+                'error': f'Exception during PR creation: {str(e)}',
+                'type': type(e).__name__
+            }
     
     def update_agent(self, agent_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
         """

@@ -4,6 +4,10 @@ import google.generativeai as genai
 from typing import Dict, List, Any, Optional
 from config import Config
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+import logging
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 genai.configure(api_key=Config.GEMINI_API_KEY)
 
@@ -11,9 +15,10 @@ class AgentParser:
     """Service for parsing LangChain agents from repository code"""
     
     def __init__(self):
-        self.model = genai.GenerativeModel('gemini-2.5-flash')
+        self.model = genai.GenerativeModel('gemini-2.0-flash-exp')  # Using faster model
         self.request_timeout = 120  # 2 minutes timeout
-        self.max_retries = 3
+        self.max_retries = 2
+        logger.info(f"AgentParser initialized with model: gemini-2.0-flash-exp")
         
     def parse_agents(self, repo_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -25,24 +30,49 @@ class AgentParser:
         Returns:
             Structured agent data with configurations, tools, and relationships
         """
+        logger.info("=== Starting agent parsing ===")
         files = repo_data.get('files', [])
+        logger.info(f"Total files in repo_data: {len(files)}")
+        
+        # Log first few file paths for debugging
+        if files:
+            logger.info(f"Sample file paths: {[f.get('path', 'no-path') for f in files[:5]]}")
+        else:
+            logger.warning("No files found in repo_data!")
         
         # Step 1: Identify files containing LangChain agents
+        logger.info("Step 1: Identifying agent files...")
         agent_files = self._identify_agent_files(files)
+        logger.info(f"Found {len(agent_files)} files that may contain agents")
+        if agent_files:
+            logger.info(f"Agent file paths: {[f.get('path') for f in agent_files]}")
         
         # Step 2: Extract agent configurations
+        logger.info("Step 2: Extracting agent configurations...")
         agents = []
-        for file in agent_files:
+        for idx, file in enumerate(agent_files):
+            logger.info(f"Processing agent file {idx+1}/{len(agent_files)}: {file.get('path')}")
             extracted_agents = self._extract_agents_from_file(file)
+            logger.info(f"  -> Extracted {len(extracted_agents)} agents from this file")
             agents.extend(extracted_agents)
         
+        logger.info(f"Total agents extracted: {len(agents)}")
+        if agents:
+            logger.info(f"Agent names: {[a.get('name', 'unnamed') for a in agents]}")
+        
         # Step 3: Extract tools
+        logger.info("Step 3: Extracting tools...")
         tools = self._extract_tools(files, agents)
+        logger.info(f"Total tools extracted: {len(tools)}")
+        if tools:
+            logger.info(f"Tool names: {[t.get('name', 'unnamed') for t in tools]}")
         
         # Step 4: Identify relationships between agents
+        logger.info("Step 4: Identifying relationships...")
         relationships = self._identify_relationships(agents, files)
+        logger.info(f"Total relationships identified: {len(relationships)}")
         
-        return {
+        result = {
             'agents': agents,
             'tools': tools,
             'relationships': relationships,
@@ -52,9 +82,13 @@ class AgentParser:
                 'description': repo_data.get('description')
             }
         }
+        
+        logger.info(f"=== Agent parsing complete: {len(agents)} agents, {len(tools)} tools, {len(relationships)} relationships ===")
+        return result
     
     def _identify_agent_files(self, files: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Identify files that contain LangChain agent definitions"""
+        logger.info(f"Scanning {len(files)} files for agent keywords...")
         agent_files = []
         
         # Keywords that indicate agent usage
@@ -66,13 +100,25 @@ class AgentParser:
         
         for file in files:
             content = file.get('content', '')
-            if any(keyword in content for keyword in agent_keywords):
+            path = file.get('path', 'unknown')
+            
+            # Check if any keyword is in the file
+            matching_keywords = [kw for kw in agent_keywords if kw in content]
+            
+            if matching_keywords:
+                logger.info(f"  ✓ {path} contains: {matching_keywords}")
                 agent_files.append(file)
+            else:
+                logger.debug(f"  ✗ {path} - no agent keywords found")
         
+        logger.info(f"Identified {len(agent_files)} potential agent files")
         return agent_files
     
     def _extract_agents_from_file(self, file: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Extract agent configurations from a file using Gemini AI"""
+        
+        file_path = file.get('path', 'unknown')
+        logger.info(f"Extracting agents from {file_path} using Gemini AI...")
         
         prompt = f"""
 Analyze the following Python code and extract all LangChain agent configurations.
@@ -114,26 +160,36 @@ If no agents are found, return an empty array [].
 """
         
         try:
+            logger.info(f"  Sending request to Gemini AI for {file_path}...")
             # Use ThreadPoolExecutor for timeout
             with ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(self.model.generate_content, prompt)
                 try:
                     response = future.result(timeout=30)  # 30 second timeout
                     text = response.text.strip()
+                    logger.info(f"  Received response from Gemini AI ({len(text)} chars)")
+                    logger.debug(f"  Response preview: {text[:200]}...")
                 except (FuturesTimeoutError, Exception) as e:
-                    print(f"Agent extraction timed out or failed for {file['path']}: {str(e)}")
+                    logger.error(f"  Agent extraction timed out or failed for {file_path}: {str(e)}")
                     return []
             
             # Extract JSON from response
             json_match = re.search(r'\[.*\]', text, re.DOTALL)
             if json_match:
                 agents = json.loads(json_match.group())
+                logger.info(f"  Successfully parsed {len(agents)} agents from response")
                 return agents
+            else:
+                logger.warning(f"  No JSON array found in response for {file_path}")
+                logger.debug(f"  Full response: {text}")
             
             return []
             
+        except json.JSONDecodeError as e:
+            logger.error(f"  JSON decode error for {file_path}: {str(e)}")
+            return []
         except Exception as e:
-            print(f"Error extracting agents from {file['path']}: {str(e)}")
+            logger.error(f"  Error extracting agents from {file_path}: {str(e)}", exc_info=True)
             return []
     
     def _extract_tools(self, files: List[Dict[str, Any]], agents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

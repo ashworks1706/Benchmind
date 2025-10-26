@@ -11,12 +11,15 @@ export default function ChangeQueuePanel() {
   const { queuedChanges, removeQueuedChange, clearQueuedChanges, addStatusMessage, agentData } = useStore();
   const [isPushing, setIsPushing] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
   if (queuedChanges.length === 0) return null;
 
   const handlePushChanges = async () => {
     if (!agentData) return;
     
+    // Close confirmation dialog
+    setShowConfirmDialog(false);
     setIsPushing(true);
 
     try {
@@ -40,15 +43,34 @@ export default function ChangeQueuePanel() {
             agentData
           );
           
-          if (result.result.success) {
+          // Handle successful PR creation
+          if (result.result.success && result.result.pr_url) {
             successCount += fixes.length;
             addStatusMessage({
               type: 'success',
-              message: `✅ Committed ${result.result.files_updated} file(s) with ${result.result.total_fixes} fix(es) to GitHub!`,
+              message: `✅ Pull Request created! ${result.result.files_updated} file(s) with ${result.result.total_fixes} fix(es)`,
+            });
+            
+            // Show PR link
+            addStatusMessage({
+              type: 'success',
+              message: `🔗 PR #${result.result.pr_number}: ${result.result.pr_url}`,
+            });
+            
+            // Open PR in new tab
+            if (typeof window !== 'undefined') {
+              window.open(result.result.pr_url, '_blank');
+            }
+          } else if (result.result.success) {
+            // Fallback for direct commits
+            successCount += fixes.length;
+            addStatusMessage({
+              type: 'success',
+              message: `✅ Committed ${result.result.files_updated} file(s) with ${result.result.total_fixes} fix(es)!`,
             });
           } else {
             failCount += fixes.length;
-            const errorMsg = result.result.errors.join(', ');
+            const errorMsg = result.result.errors?.join?.(', ') || result.result.error || 'Unknown error';
             addStatusMessage({
               type: 'error',
               message: `❌ Failed to push fixes: ${errorMsg}`,
@@ -172,7 +194,7 @@ export default function ChangeQueuePanel() {
           {/* Actions */}
           <div className="p-3 border-t border-border flex gap-2">
             <Button
-              onClick={handlePushChanges}
+              onClick={() => setShowConfirmDialog(true)}
               disabled={isPushing}
               className="flex-1"
             >
@@ -192,6 +214,46 @@ export default function ChangeQueuePanel() {
             >
               <Trash2 className="w-4 h-4" />
             </Button>
+          </div>
+        </div>
+      )}
+      
+      {/* Confirmation Dialog */}
+      {showConfirmDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-100">
+          <div className="bg-background border border-border rounded-lg shadow-2xl w-96 p-6">
+            <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+              <Github className="w-5 h-5" />
+              Create Pull Request?
+            </h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              This will create a new branch and open a Pull Request with {queuedChanges.length} change{queuedChanges.length !== 1 ? 's' : ''}.
+            </p>
+            <div className="bg-muted/50 rounded-lg p-3 mb-4 text-sm">
+              <div className="flex justify-between mb-1">
+                <span className="text-muted-foreground">Changes:</span>
+                <span className="font-medium">{queuedChanges.length}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Files:</span>
+                <span className="font-medium">{new Set(queuedChanges.map(c => c.data.recommendation?.file_path)).size}</span>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                onClick={handlePushChanges}
+                className="flex-1"
+              >
+                Create PR
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setShowConfirmDialog(false)}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+            </div>
           </div>
         </div>
       )}

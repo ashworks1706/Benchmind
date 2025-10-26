@@ -7,6 +7,7 @@ import {
   SelectedElement,
   PanelView,
 } from '@/types';
+import { TestCollection } from '@/types/collections';
 
 interface AppState {
   // Data
@@ -37,6 +38,12 @@ interface AppState {
   warningHighlightedElements: Set<string>; // For elements with recommendations/warnings
   isTestingInProgress: boolean;
   currentTestIndex: number;
+  currentRunningTestId: string | null; // Track which test is currently running for color coordination
+  
+  // Test Collections
+  testCollections: TestCollection[];
+  activeCollectionId: string | null;
+  showReportModal: boolean;
   
   // Change Queue
   queuedChanges: Array<{
@@ -66,7 +73,15 @@ interface AppState {
   startTesting: () => void;
   stopTesting: () => void;
   setCurrentTestIndex: (index: number) => void;
+  setCurrentRunningTestId: (testId: string | null) => void;
   setAnalysisSteps: (steps: any[] | ((prev: any[]) => any[])) => void;
+  
+  // Collection Actions
+  addTestCollection: (collection: TestCollection) => void;
+  updateTestCollection: (id: string, updates: Partial<TestCollection>) => void;
+  deleteTestCollection: (id: string) => void;
+  setActiveCollection: (id: string | null) => void;
+  setShowReportModal: (show: boolean) => void;
   
   // Testing Session Actions
   setTestingSessionId: (id: string | null) => void;
@@ -114,6 +129,12 @@ export const useStore = create<AppState>((set) => ({
   warningHighlightedElements: new Set(),
   isTestingInProgress: false,
   currentTestIndex: -1,
+  currentRunningTestId: null,
+  
+  // Test Collections
+  testCollections: [],
+  activeCollectionId: null,
+  showReportModal: false,
   
   // Change Queue
   queuedChanges: [],
@@ -197,6 +218,8 @@ export const useStore = create<AppState>((set) => ({
   
   setCurrentTestIndex: (index) => set({ currentTestIndex: index }),
   
+  setCurrentRunningTestId: (testId) => set({ currentRunningTestId: testId }),
+  
   setAnalysisSteps: (steps) => 
     set((state) => ({
       analysisSteps: typeof steps === 'function' ? steps(state.analysisSteps) : steps
@@ -240,6 +263,49 @@ export const useStore = create<AppState>((set) => ({
   
   clearQueuedChanges: () => set({ queuedChanges: [] }),
   
+  // Collection Actions
+  addTestCollection: (collection) =>
+    set((state) => {
+      const newCollections = [...state.testCollections, collection];
+      // Save to localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('testCollections', JSON.stringify(newCollections));
+      }
+      return {
+        testCollections: newCollections,
+        activeCollectionId: collection.id,
+      };
+    }),
+  
+  updateTestCollection: (id, updates) =>
+    set((state) => {
+      const newCollections = state.testCollections.map((col) =>
+        col.id === id ? { ...col, ...updates, updatedAt: new Date().toISOString() } : col
+      );
+      // Save to localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('testCollections', JSON.stringify(newCollections));
+      }
+      return { testCollections: newCollections };
+    }),
+  
+  deleteTestCollection: (id) =>
+    set((state) => {
+      const newCollections = state.testCollections.filter((col) => col.id !== id);
+      // Save to localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('testCollections', JSON.stringify(newCollections));
+      }
+      return {
+        testCollections: newCollections,
+        activeCollectionId: state.activeCollectionId === id ? null : state.activeCollectionId,
+      };
+    }),
+  
+  setActiveCollection: (id) => set({ activeCollectionId: id }),
+  
+  setShowReportModal: (show) => set({ showReportModal: show }),
+  
   loadFromLocalStorage: () => {
     if (typeof window !== 'undefined') {
       try {
@@ -247,18 +313,31 @@ export const useStore = create<AppState>((set) => ({
         const savedUrl = localStorage.getItem('currentRepoUrl');
         const savedAnalysisId = localStorage.getItem('currentAnalysisId');
         const savedFromCache = localStorage.getItem('fromCache') === 'true';
+        const savedCollections = localStorage.getItem('testCollections');
+        
+        const updates: any = {};
         
         if (savedData) {
           const data = JSON.parse(savedData);
-          set({ 
-            agentData: data, 
-            currentRepoUrl: savedUrl,
-            currentAnalysisId: savedAnalysisId,
-            fromCache: savedFromCache
-          });
+          updates.agentData = data;
+          updates.currentRepoUrl = savedUrl;
+          updates.currentAnalysisId = savedAnalysisId;
+          updates.fromCache = savedFromCache;
         } else if (savedAnalysisId) {
           // If we have an analysis ID but no data, we can resume
-          set({ currentAnalysisId: savedAnalysisId });
+          updates.currentAnalysisId = savedAnalysisId;
+        }
+        
+        if (savedCollections) {
+          try {
+            updates.testCollections = JSON.parse(savedCollections);
+          } catch (e) {
+            console.error('Error parsing saved collections:', e);
+          }
+        }
+        
+        if (Object.keys(updates).length > 0) {
+          set(updates);
         }
       } catch (error) {
         console.error('Error loading from localStorage:', error);

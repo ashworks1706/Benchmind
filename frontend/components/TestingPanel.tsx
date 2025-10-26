@@ -6,12 +6,10 @@ import { apiService } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { TestCase } from '@/types';
+import { ResearchReportModal } from './ResearchReportModal';
 import { 
   Play, 
-  Square, 
   CheckCircle2, 
-  XCircle, 
-  AlertCircle,
   Loader2,
   Edit3,
   Send,
@@ -28,6 +26,9 @@ import {
     testReport,
     currentRepoUrl,
     currentAnalysisId,
+    testCollections,
+    activeCollectionId,
+    showReportModal,
     setTestingSessionId,
     setTestingStatus,
     addTestingProgress,
@@ -41,6 +42,9 @@ import {
     highlightErrorElements,
     clearErrorHighlights,
     setGeneratingTests,
+    setCurrentRunningTestId,
+    addTestCollection,
+    setShowReportModal,
   } = useStore();
 
   const [isPolling, setIsPolling] = useState(false);
@@ -120,6 +124,8 @@ import {
             const elementsToHighlight = [...progress.data.highlight_elements];
             if (progress.data.test_id) {
               elementsToHighlight.push(`test-${progress.data.test_id}`);
+              // Track current running test for color coordination
+              setCurrentRunningTestId(progress.data.test_id);
             }
             highlightElements(elementsToHighlight);
             
@@ -127,6 +133,7 @@ import {
             if (progress.type !== 'test_started') {
               setTimeout(() => {
                 clearHighlights();
+                setCurrentRunningTestId(null);
               }, 3000);
             }
           }
@@ -161,6 +168,28 @@ import {
           // Fetch final report
           const reportData = await apiService.getTestReport(testingSessionId);
           setTestReport(reportData.report);
+          
+          // Save collection to localStorage
+          if (reportData.report && data.test_cases) {
+            const collection = {
+              id: testingSessionId,
+              name: reportData.report.collection_name || 'Test Suite',
+              description: reportData.report.collection_description || 'Test execution results',
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              testCases: data.test_cases.map((tc: any) => tc.id), // Store test case IDs
+              testReport: reportData.report,
+              status: 'completed' as const,
+              sessionId: testingSessionId,
+              metadata: {
+                totalTests: reportData.report.summary?.total_tests || 0,
+                passedTests: reportData.report.summary?.passed || 0,
+                failedTests: reportData.report.summary?.failed || 0,
+                successRate: reportData.report.summary?.success_rate || 0,
+              },
+            };
+            addTestCollection(collection);
+          }
           
           // Highlight failed/warning tests in canvas for visualization
           if (reportData.report) {
@@ -276,11 +305,6 @@ import {
         message: `Failed to start tests: ${error.message}`,
       });
     }
-  };
-
-  // View test report
-  const handleViewReport = () => {
-    setPanelView('testing-report');
   };
 
   // Render test case card
@@ -484,10 +508,13 @@ import {
               <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
                 <div className="flex items-center gap-2 mb-2">
                   <CheckCircle2 className="w-5 h-5 text-green-600" />
-                  <h4 className="font-semibold">Testing Complete!</h4>
+                  <h4 className="font-semibold">
+                    {testReport.collection_name || 'Test Suite Execution Complete'}
+                  </h4>
                 </div>
                 <p className="text-sm text-muted-foreground mb-4">
-                  All tests have been executed. View the detailed report for insights and recommendations.
+                  {testReport.collection_description || 
+                   'All tests have been executed. View the detailed report for insights and recommendations.'}
                 </p>
 
                 {/* Quick Summary */}
@@ -516,7 +543,10 @@ import {
                   </div>
                 </div>
 
-                <Button onClick={handleViewReport} className="w-full mt-4">
+                <Button 
+                  onClick={() => setShowReportModal(true)} 
+                  className="w-full mt-4"
+                >
                   <BarChart3 className="w-4 h-4 mr-2" />
                   View Detailed Report
                 </Button>
@@ -525,6 +555,15 @@ import {
           )}
         </div>
       </ScrollArea>
+
+      {/* Research Report Modal */}
+      {showReportModal && testReport && (
+        <ResearchReportModal 
+          testReport={testReport}
+          testCases={pendingTestCases}
+          onClose={() => setShowReportModal(false)}
+        />
+      )}
     </div>
   );
 }

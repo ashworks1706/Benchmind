@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from '@/lib/store';
 import { Agent, Tool, Relationship, TestCase } from '@/types';
+import { getTestCaseColor } from '@/lib/testColors';
 
 interface CanvasNode {
   id: string;
@@ -24,7 +25,7 @@ interface CanvasEdge {
 }
 
 export function Canvas() {
-  const { agentData, isLoading, loadingMessage, isGeneratingTests, highlightedElements, errorHighlightedElements, warningHighlightedElements, setSelectedElement, setPanelView, testCases, pendingTestCases, testResults, currentTestIndex, isTestingInProgress } = useStore();
+  const { agentData, isLoading, loadingMessage, isGeneratingTests, highlightedElements, errorHighlightedElements, warningHighlightedElements, setSelectedElement, setPanelView, testCases, pendingTestCases, testResults, currentTestIndex, isTestingInProgress, currentRunningTestId } = useStore();
   const canvasRef = useRef<HTMLDivElement>(null);
   const [nodes, setNodes] = useState<CanvasNode[]>([]);
   const [edges, setEdges] = useState<CanvasEdge[]>([]);
@@ -36,6 +37,11 @@ export function Canvas() {
 
   // Use pendingTestCases or testCases - whichever has data
   const activeTestCases = pendingTestCases.length > 0 ? pendingTestCases : testCases;
+  
+  // Get the color for the currently running test
+  const currentTestColor = currentRunningTestId 
+    ? getTestCaseColor(activeTestCases.findIndex(tc => tc.id === currentRunningTestId))
+    : null;
 
   // Build graph from agent data with alternating zigzag pattern
   useEffect(() => {

@@ -101,6 +101,9 @@ class Analysis(Base):
     # Agent data stored as JSON (full AgentData structure)
     agent_data = Column(JSON)
     
+    # Test cases stored as JSON array
+    test_cases = Column(JSON)
+    
     # Status tracking
     status = Column(String(50), default='queued', nullable=False)  # queued, processing, completed, failed
     progress = Column(Integer, default=0)
@@ -126,6 +129,7 @@ class Analysis(Base):
             'id': self.id,
             'projectId': self.project_id,
             'agentData': self.agent_data,
+            'testCases': self.test_cases,
             'status': self.status,
             'progress': self.progress,
             'errorMessage': self.error_message,

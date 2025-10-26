@@ -192,7 +192,7 @@ REMEMBER: This is a DISTILLED, FILTERED testing environment - NOT actual code ex
             with ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(self.model.generate_content, prompt)
                 try:
-                    response = future.result(timeout=20)  # 20 second timeout
+                    response = future.result(timeout=50)  # 20 second timeout
                     text = response.text.strip()
                 except FuturesTimeoutError:
                     print("Framework generation timed out after 20 seconds")
