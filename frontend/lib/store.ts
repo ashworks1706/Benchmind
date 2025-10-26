@@ -27,6 +27,14 @@ interface AppState {
   testReport: any | null;
   pendingTestCases: TestCase[];
   
+  // Objective Focus (for cost calculations)
+  objectiveFocus: {
+    reasoning: number;      // 0-100
+    accuracy: number;       // 0-100
+    costOptimization: number; // 0-100
+    speed: number;          // 0-100
+  };
+  
   // UI State
   isLoading: boolean;
   loadingMessage: string;
@@ -113,6 +121,9 @@ interface AppState {
   toggleSessionVisibility: (sessionId: string) => void;
   getVisibleSessions: () => string[];
   
+  // Objective Focus Actions
+  setObjectiveFocus: (focus: Partial<AppState['objectiveFocus']>) => void;
+  
   loadFromLocalStorage: () => void;
   clearLocalStorage: () => void;
   reset: () => void;
@@ -134,6 +145,14 @@ export const useStore = create<AppState>((set, get) => ({
   testingProgress: [],
   testReport: null,
   pendingTestCases: [],
+  
+  // Objective Focus
+  objectiveFocus: {
+    reasoning: 50,
+    accuracy: 50,
+    costOptimization: 50,
+    speed: 50,
+  },
   
   isLoading: false,
   loadingMessage: '',

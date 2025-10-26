@@ -84,24 +84,35 @@ export function calculateAgentCost(
 }
 
 /**
- * Calculate cost for tool operations
+ * Calculate cost for tool execution
  */
 export function calculateToolCost(
   tool: any,
-  callsPerDay = 5
+  callsPerDay = 5,
+  multipliers?: CostMultipliers
 ): CostEstimate {
-  // Tools are simpler - usually just execution cost
-  const avgTokens = tool.code ? estimateTokens(tool.code) : 100;
+  // Tools typically don't have LLM costs, just execution overhead
+  // Estimate based on complexity from code length
+  const codeTokens = tool.code ? estimateTokens(tool.code) : 100;
   
-  // Minimal cost for tool execution (no LLM involved usually)
-  const costPerCall = 0.0001; // $0.0001 per call
+  // Apply multipliers
+  const accuracyMultiplier = multipliers?.accuracy ?? 1.0;
+  const costMultiplier = multipliers?.costOptimization ?? 1.0;
+  const speedMultiplier = multipliers?.speed ?? 1.0;
+  
+  // Base execution cost (in dollars per call)
+  const executionCost = 0.0001; // Very small per-execution cost
+  
+  // Apply multipliers: accuracy affects call frequency, speed affects daily calls, cost optimization reduces overall cost
+  const adjustedCallsPerDay = callsPerDay * accuracyMultiplier * speedMultiplier;
+  const totalCost = executionCost * adjustedCallsPerDay / costMultiplier;
   
   return {
-    inputTokens: avgTokens,
+    inputTokens: 0,
     outputTokens: 0,
-    totalCost: costPerCall * callsPerDay,
-    model: 'tool-execution',
-    apiCalls: callsPerDay,
+    totalCost,
+    model: 'N/A',
+    apiCalls: Math.round(adjustedCallsPerDay),
   };
 }
 
@@ -110,20 +121,30 @@ export function calculateToolCost(
  */
 export function calculateConnectionCost(
   relationship: any,
-  callsPerDay = 10
+  callsPerDay = 10,
+  multipliers?: CostMultipliers
 ): CostEstimate {
   // Connection costs = data transfer + coordination overhead
   const dataTokens = relationship.data_flow ? estimateTokens(relationship.data_flow) : 50;
   
+  // Apply multipliers
+  const accuracyMultiplier = multipliers?.accuracy ?? 1.0;
+  const costMultiplier = multipliers?.costOptimization ?? 1.0;
+  const speedMultiplier = multipliers?.speed ?? 1.0;
+  
   // Small cost per connection (data serialization, transfer, etc.)
   const costPerCall = 0.00005; // $0.00005 per connection
+  
+  // Apply multipliers: accuracy affects call frequency, speed affects daily calls, cost optimization reduces overall cost
+  const adjustedCallsPerDay = callsPerDay * accuracyMultiplier * speedMultiplier;
+  const totalCost = costPerCall * adjustedCallsPerDay / costMultiplier;
   
   return {
     inputTokens: dataTokens,
     outputTokens: 0,
-    totalCost: costPerCall * callsPerDay,
+    totalCost,
     model: 'connection',
-    apiCalls: callsPerDay,
+    apiCalls: Math.round(adjustedCallsPerDay),
   };
 }
 

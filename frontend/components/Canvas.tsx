@@ -4,7 +4,7 @@ import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { useStore } from '@/lib/store';
 import { Agent, Tool, TestCase, Relationship } from '@/types';
 import { getTestCaseColor } from '@/lib/testColors';
-import { calculateAgentCost, calculateToolCost, calculateConnectionCost, formatCost, getCostColor } from '@/lib/costCalculator';
+import { calculateAgentCost, calculateToolCost, calculateConnectionCost, formatCost, getCostColor, CostMultipliers } from '@/lib/costCalculator';
 import { SessionSelector } from './SessionSelector';
 import { ResearchReportModal } from './ResearchReportModal';
 import { ObjectiveFocusPanel } from './ObjectiveFocusPanel';
