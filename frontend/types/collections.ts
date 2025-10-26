@@ -25,6 +25,8 @@ export interface TestSession {
   };
   fixes: any[]; // Array of Fix objects with status
   fixesLocked: boolean; // True when user must accept/reject before proceeding
+  appliedToGithub?: boolean; // True when fixes have been pushed to GitHub
+  githubPrUrl?: string; // URL of the created Pull Request
 }
 
 export interface TestCollection {

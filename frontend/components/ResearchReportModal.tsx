@@ -1,11 +1,13 @@
 'use client';
 
-import { X, Download, Printer, Check, XCircle as XIcon, Clock } from 'lucide-react';
+import { X, Download, Printer, Check, XCircle as XIcon, Clock, Github } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { useRef, useState } from 'react';
 import { TestCase } from '@/types';
+import { apiService } from '@/lib/api';
+import { useStore } from '@/lib/store';
 import {
   BarChart,
   Bar,
@@ -32,6 +34,7 @@ interface Fix {
   status: 'pending' | 'accepted' | 'rejected';
   test_name?: string;
   timestamp?: string;
+  decidedAt?: string;
 }
 
 interface ResearchReportModalProps {
@@ -42,6 +45,8 @@ interface ResearchReportModalProps {
   onAcceptFix?: (fixId: string) => void;
   onRejectFix?: (fixId: string) => void;
   canExport?: boolean;
+  appliedToGithub?: boolean;
+  githubPrUrl?: string;
 }
 
 export function ResearchReportModal({
@@ -52,11 +57,17 @@ export function ResearchReportModal({
   onAcceptFix,
   onRejectFix,
   canExport = true,
+  appliedToGithub = false,
+  githubPrUrl,
 }: ResearchReportModalProps) {
   const reportRef = useRef<HTMLDivElement>(null);
   const [expandedFix, setExpandedFix] = useState<string | null>(null);
+  const [isPushing, setIsPushing] = useState(false);
+  const [showPushConfirm, setShowPushConfirm] = useState(false);
+  const { agentData, addStatusMessage } = useStore();
   
   const pendingFixes = fixes.filter((f) => f.status === 'pending');
+  const acceptedFixes = fixes.filter((f) => f.status === 'accepted');
   const hasUnreviewedFixes = pendingFixes.length > 0;
   
   const COLORS = ['#10b981', '#ef4444', '#f59e0b', '#3b82f6'];
@@ -638,6 +649,192 @@ export function ResearchReportModal({
             </section>
           )}
 
+          {/* Push to GitHub Section - Show after fixes are reviewed */}
+          {fixes.length > 0 && !appliedToGithub && acceptedFixes.length > 0 && (
+            <section className="space-y-4 print:hidden">
+              <h2 className="text-2xl font-bold border-b pb-2">Push Changes to GitHub</h2>
+              
+              <div className="p-6 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 border-2 border-blue-300 dark:border-blue-700 rounded-lg">
+                <div className="flex items-start gap-4">
+                  <Github className="w-12 h-12 text-blue-600 shrink-0" />
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold mb-2">Ready to Apply Fixes</h3>
+                    <p className="text-sm text-gray-700 dark:text-gray-300 mb-4">
+                      You have reviewed all fixes. Click below to create a Pull Request with the accepted changes.
+                    </p>
+                    
+                    <div className="grid grid-cols-3 gap-4 mb-4 p-4 bg-white dark:bg-gray-900 rounded border">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-green-600">{acceptedFixes.length}</div>
+                        <div className="text-xs text-gray-600">Accepted</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-red-600">
+                          {fixes.filter(f => f.status === 'rejected').length}
+                        </div>
+                        <div className="text-xs text-gray-600">Rejected</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-gray-600">
+                          {new Set(acceptedFixes.map(f => f.file_path).filter(Boolean)).size}
+                        </div>
+                        <div className="text-xs text-gray-600">Files</div>
+                      </div>
+                    </div>
+
+                    {!showPushConfirm ? (
+                      <Button
+                        onClick={() => setShowPushConfirm(true)}
+                        className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                        size="lg"
+                        disabled={hasUnreviewedFixes}
+                      >
+                        <Github className="w-5 h-5 mr-2" />
+                        {hasUnreviewedFixes 
+                          ? `Review ${pendingFixes.length} Pending Fix${pendingFixes.length > 1 ? 'es' : ''} First`
+                          : 'Create Pull Request'
+                        }
+                      </Button>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="p-4 bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-300 dark:border-yellow-700 rounded">
+                          <p className="text-sm font-semibold mb-2">⚠️ Confirm Pull Request Creation</p>
+                          <p className="text-xs text-gray-700 dark:text-gray-300">
+                            This will create a new branch and open a Pull Request with {acceptedFixes.length} accepted fix{acceptedFixes.length > 1 ? 'es' : ''}.
+                            The changes will be available for review before merging.
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={async () => {
+                              if (!agentData) {
+                                addStatusMessage({
+                                  type: 'error',
+                                  message: 'Agent data not found. Please reload the page.',
+                                });
+                                return;
+                              }
+
+                              setIsPushing(true);
+                              try {
+                                addStatusMessage({
+                                  type: 'info',
+                                  message: `🚀 Creating Pull Request with ${acceptedFixes.length} fixes...`,
+                                });
+
+                                const result = await apiService.applyFixesBatch(
+                                  acceptedFixes.map(f => ({
+                                    file_path: f.file_path,
+                                    description: f.description,
+                                    current_code: f.current_code,
+                                    suggested_code: f.suggested_code,
+                                    severity: f.severity,
+                                  })),
+                                  agentData
+                                );
+
+                                if (result.result.success && result.result.pr_url) {
+                                  addStatusMessage({
+                                    type: 'success',
+                                    message: `✅ Pull Request #${result.result.pr_number} created successfully!`,
+                                  });
+
+                                  // Open PR in new tab
+                                  if (typeof window !== 'undefined') {
+                                    window.open(result.result.pr_url, '_blank');
+                                  }
+
+                                  // Mark as applied - you'll need to update the session in store
+                                  addStatusMessage({
+                                    type: 'success',
+                                    message: `🔗 ${result.result.pr_url}`,
+                                  });
+                                } else {
+                                  throw new Error(result.result.error || 'Failed to create PR');
+                                }
+                              } catch (error: any) {
+                                addStatusMessage({
+                                  type: 'error',
+                                  message: `❌ Failed to create PR: ${error.message}`,
+                                });
+                              } finally {
+                                setIsPushing(false);
+                                setShowPushConfirm(false);
+                              }
+                            }}
+                            className="flex-1 bg-green-600 hover:bg-green-700"
+                            disabled={isPushing}
+                          >
+                            {isPushing ? '⏳ Creating PR...' : 'Confirm & Create PR'}
+                          </Button>
+                          <Button
+                            onClick={() => setShowPushConfirm(false)}
+                            variant="outline"
+                            className="flex-1"
+                            disabled={isPushing}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* Applied Actions Section - Show if already pushed */}
+          {appliedToGithub && githubPrUrl && (
+            <section className="space-y-4">
+              <h2 className="text-2xl font-bold border-b pb-2">Applied Actions</h2>
+              
+              <div className="p-6 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border-2 border-green-300 dark:border-green-700 rounded-lg">
+                <div className="flex items-start gap-4">
+                  <Check className="w-12 h-12 text-green-600 shrink-0" />
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold mb-2 text-green-900 dark:text-green-100">
+                      ✅ Changes Applied to GitHub
+                    </h3>
+                    <p className="text-sm text-gray-700 dark:text-gray-300 mb-4">
+                      All accepted fixes have been pushed to GitHub and are ready for review.
+                    </p>
+                    
+                    <div className="p-4 bg-white dark:bg-gray-900 rounded border mb-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-semibold mb-1">Pull Request</p>
+                          <p className="text-xs text-gray-600 font-mono break-all">{githubPrUrl}</p>
+                        </div>
+                        <Button
+                          onClick={() => window.open(githubPrUrl, '_blank')}
+                          variant="outline"
+                          size="sm"
+                        >
+                          <Github className="w-4 h-4 mr-2" />
+                          View PR
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="text-center p-3 bg-white dark:bg-gray-900 rounded border">
+                        <div className="text-xl font-bold text-green-600">{acceptedFixes.length}</div>
+                        <div className="text-xs text-gray-600">Fixes Applied</div>
+                      </div>
+                      <div className="text-center p-3 bg-white dark:bg-gray-900 rounded border">
+                        <div className="text-xl font-bold text-gray-600">
+                          {new Set(fixes.map(f => f.file_path).filter(Boolean)).size}
+                        </div>
+                        <div className="text-xs text-gray-600">Files Modified</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* Chart Analysis Section */}
           <section className="space-y-4">
             <h2 className="text-2xl font-bold border-b pb-2">7. Statistical Analysis & Visualizations</h2>
@@ -782,6 +979,18 @@ export function ResearchReportModal({
               </p>
             </div>
           </section>
+
+          {/* Close Button at Bottom */}
+          <div className="mt-8 pt-6 border-t border-border flex justify-center print:hidden">
+            <Button
+              onClick={onClose}
+              variant="outline"
+              size="lg"
+              className="min-w-[200px]"
+            >
+              Close Report
+            </Button>
+          </div>
         </div>
       </div>
     </div>

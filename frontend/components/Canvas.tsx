@@ -999,6 +999,8 @@ export function Canvas() {
             onAcceptFix={(fixId) => acceptFix(fixId, currentProgressSessionId)}
             onRejectFix={(fixId) => rejectFix(fixId, currentProgressSessionId)}
             canExport={session.fixes?.every(f => f.status !== 'pending') ?? true}
+            appliedToGithub={session.appliedToGithub}
+            githubPrUrl={session.githubPrUrl}
           />
         );
       })()}
