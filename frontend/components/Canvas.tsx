@@ -61,6 +61,8 @@ export function Canvas() {
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [draggedNode, setDraggedNode] = useState<CanvasNode | null>(null);
   const [nodeDragStart, setNodeDragStart] = useState({ x: 0, y: 0 });
+  const [showAgents, setShowAgents] = useState(true);
+  const [showTools, setShowTools] = useState(true);
 
   // Auto-fit zoom function
   const autoFitZoom = useCallback(() => {
@@ -129,7 +131,8 @@ export function Canvas() {
       return pendingTestCases;
     }
     
-    // Otherwise, only show test cases from visible sessions (NOT from store's testCases)
+    // Show test cases from visible sessions ONLY
+    // Each test case should be shown per session (not deduplicated across sessions)
     const visibleSessionTestCases: TestCase[] = [];
     
     console.log('[Canvas] Computing visible session test cases');
@@ -143,7 +146,17 @@ export function Canvas() {
         if (visibleSessionIds.includes(session.id)) {
           console.log('[Canvas] Adding test cases from session:', session.id, 'count:', session.testCases?.length);
           if (session.testCases && Array.isArray(session.testCases)) {
-            visibleSessionTestCases.push(...session.testCases);
+            // Add each test case with a session-specific ID to prevent duplication issues
+            session.testCases.forEach(testCase => {
+              visibleSessionTestCases.push({
+                ...testCase,
+                // Add session ID to make each test unique per session
+                id: `${session.id}-${testCase.id}`,
+                // Keep original ID for result lookup
+                originalId: testCase.id,
+                sessionId: session.id,
+              } as any);
+            });
           }
         }
       });
@@ -155,21 +168,44 @@ export function Canvas() {
 
   // Helper function to get test result from session's testReport
   const getTestResultFromSessions = useCallback((testId: string) => {
+    // Extract original test ID and session ID if this is a combined ID
+    let originalTestId = testId;
+    let specificSessionId: string | null = null;
+    
+    if (testId.includes('-') && testId.split('-').length > 1) {
+      const parts = testId.split('-');
+      specificSessionId = parts[0];
+      originalTestId = parts.slice(1).join('-');
+    }
+    
     // First check global testResults (for currently running tests)
-    const globalResult = testResults.get(testId);
+    const globalResult = testResults.get(originalTestId);
     if (globalResult) return globalResult;
 
-    // Then check each visible session's testReport
-    for (const collection of testCollections) {
-      for (const session of collection.testSessions || []) {
-        if (visibleSessionIds.includes(session.id)) {
-          // Check if this test belongs to this session
-          if (session.testCases?.some(tc => tc.id === testId)) {
-            // Get result from testReport
+    // Then check the specific session's testReport if we have a session ID
+    if (specificSessionId) {
+      for (const collection of testCollections) {
+        for (const session of collection.testSessions || []) {
+          if (session.id === specificSessionId) {
             const testReport = session.testReport;
             if (testReport?.test_results) {
-              const result = testReport.test_results.find((r: any) => r.test_id === testId);
+              const result = testReport.test_results.find((r: any) => r.test_id === originalTestId);
               if (result) return result;
+            }
+          }
+        }
+      }
+    } else {
+      // Fall back to checking visible sessions
+      for (const collection of testCollections) {
+        for (const session of collection.testSessions || []) {
+          if (visibleSessionIds.includes(session.id)) {
+            if (session.testCases?.some(tc => tc.id === originalTestId)) {
+              const testReport = session.testReport;
+              if (testReport?.test_results) {
+                const result = testReport.test_results.find((r: any) => r.test_id === originalTestId);
+                if (result) return result;
+              }
             }
           }
         }
@@ -342,27 +378,61 @@ export function Canvas() {
         return nonTestNodes;
       }
       
-      // Calculate the rightmost position from existing nodes
-      const maxX = nonTestNodes.reduce((max, node) => Math.max(max, node.x + node.width), 0);
+      // Calculate center point and bounds of existing nodes
+      const bounds = nonTestNodes.reduce((acc, node) => ({
+        minX: Math.min(acc.minX, node.x),
+        maxX: Math.max(acc.maxX, node.x + node.width),
+        minY: Math.min(acc.minY, node.y),
+        maxY: Math.max(acc.maxY, node.y + node.height),
+      }), { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity });
       
-      // Create test nodes in alternating zigzag pattern to the right
+      const centerX = (bounds.minX + bounds.maxX) / 2;
+      const centerY = (bounds.minY + bounds.maxY) / 2;
+      
+      // Helper to check if position overlaps with existing nodes
+      const isOverlapping = (x: number, y: number, width: number, height: number, existingNodes: CanvasNode[]) => {
+        const padding = 30; // Extra space around nodes
+        return existingNodes.some(node => {
+          return !(x + width + padding < node.x || 
+                   x > node.x + node.width + padding ||
+                   y + height + padding < node.y ||
+                   y > node.y + node.height + padding);
+        });
+      };
+      
+      // Create test nodes distributed around center in a circular pattern
       const testNodes: CanvasNode[] = [];
-      const testStartX = maxX + 300; // Start tests well to the right of existing nodes
-      const horizontalSpacing = 250; // Space between columns
-      const verticalSpacing = 180; // Space between rows
+      const testNodeWidth = 180;
+      const testNodeHeight = 100;
+      const radius = 400; // Distance from center
+      const angleStep = (2 * Math.PI) / Math.max(allDisplayedTestCases.length, 8); // Divide circle evenly
       
       allDisplayedTestCases.forEach((testCase, idx) => {
-        // Alternate between top and bottom rows
-        const isTopRow = idx % 2 === 0;
-        const col = Math.floor(idx / 2); // Two tests per column pair
+        let angle = idx * angleStep;
+        let attempts = 0;
+        let x, y;
+        
+        // Try to find a non-overlapping position
+        do {
+          const currentRadius = radius + (attempts * 50); // Increase radius if overlapping
+          x = centerX + Math.cos(angle) * currentRadius - testNodeWidth / 2;
+          y = centerY + Math.sin(angle) * currentRadius - testNodeHeight / 2;
+          
+          // If we've tried too many times, offset the angle slightly
+          if (attempts > 0 && attempts % 3 === 0) {
+            angle += angleStep / 4;
+          }
+          
+          attempts++;
+        } while (isOverlapping(x, y, testNodeWidth, testNodeHeight, [...nonTestNodes, ...testNodes]) && attempts < 20);
         
         const testNode: CanvasNode = {
           id: `test-${testCase.id}`,
           type: 'test',
-          x: testStartX + (col * horizontalSpacing * 2) + (isTopRow ? 0 : horizontalSpacing),
-          y: isTopRow ? 100 : 100 + verticalSpacing,
-          width: 180,
-          height: 100,
+          x,
+          y,
+          width: testNodeWidth,
+          height: testNodeHeight,
           data: testCase,
         };
         testNodes.push(testNode);
@@ -393,6 +463,7 @@ export function Canvas() {
             
             if (targetNode) {
               // Determine color based on test result from sessions
+              // Use the full combined ID to get the correct result for this session
               const result = getTestResultFromSessions(testCase.id);
               const color = result 
                 ? (result.status === 'passed' ? '#22c55e' : result.status === 'failed' ? '#ef4444' : '#f59e0b')
@@ -861,14 +932,26 @@ export function Canvas() {
           // Find test session color for this test node
           let sessionGradient: string | null = null;
           if (isTest) {
-            const testId = (node.data as TestCase).id;
-            // Find session containing this test that is visible
-            const visibleSessions = testCollections
-              .flatMap(c => c.testSessions || [])
-              .filter(s => visibleSessionIds.includes(s.id) && s.testCases?.some(tc => tc.id === testId));
-            // Use first visible session's color (priority to most recently added)
-            if (visibleSessions.length > 0) {
-              sessionGradient = visibleSessions[visibleSessions.length - 1].color;
+            const testData = node.data as any; // Has sessionId property
+            const testId = testData.id;
+            
+            // If we have a sessionId on the test data, use it directly
+            if (testData.sessionId) {
+              const session = testCollections
+                .flatMap(c => c.testSessions || [])
+                .find(s => s.id === testData.sessionId);
+              if (session) {
+                sessionGradient = session.color;
+              }
+            } else {
+              // Fallback: find session containing this test that is visible
+              const visibleSessions = testCollections
+                .flatMap(c => c.testSessions || [])
+                .filter(s => visibleSessionIds.includes(s.id) && s.testCases?.some(tc => tc.id === testId));
+              // Use first visible session's color (priority to most recently added)
+              if (visibleSessions.length > 0) {
+                sessionGradient = visibleSessions[visibleSessions.length - 1].color;
+              }
             }
           }
           
