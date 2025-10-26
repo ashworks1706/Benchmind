@@ -682,8 +682,9 @@ function RelationshipDetails({ relationship }: { relationship: Relationship }) {
       
       {/* Cost Information */}
       <div className="p-3 rounded-lg border-2 border-green-500/30 bg-green-500/5">
-        <h5 className="font-semibold text-sm text-green-700 dark:text-green-300 mb-2 flex items-center gap-2">
+        <h5 className="font-semibold text-sm text-green-700 dark:text-green-300 mb-2 flex items-center">
           💰 Cost Analysis
+          <CostInfoPopup type="connection" />
         </h5>
         <div className="space-y-2 text-sm">
           <div className="flex items-center justify-between">

@@ -9,11 +9,12 @@ import { DetailsPanel } from './DetailsPanel';
 import TestingPanel from './TestingPanel';
 import TestReportPanel from './TestReportPanel';
 import ChangeQueuePanel from './ChangeQueuePanel';
-import { Loader2, Database, Trash2, Activity, Beaker } from 'lucide-react';
+import { TestSuitesPanel } from './TestSuitesPanel';
+import { Loader2, Database, Trash2, Activity, Beaker, FileText } from 'lucide-react';
 
 export function Dashboard() {
   const [githubUrl, setGithubUrl] = useState('');
-  const [rightPanelView, setRightPanelView] = useState<'status' | 'testing' | 'report'>('status');
+  const [rightPanelView, setRightPanelView] = useState<'status' | 'testing' | 'report' | 'suites'>('status');
   const { 
     agentData, 
     isLoading, 
@@ -392,6 +393,17 @@ export function Dashboard() {
             <Beaker className="w-4 h-4" />
             Testing Suite
           </button>
+          <button
+            onClick={() => setRightPanelView('suites')}
+            className={`flex-1 px-4 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+              rightPanelView === 'suites'
+                ? 'bg-background text-foreground border-b-2 border-primary'
+                : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            Test Suites
+          </button>
         </div>
 
         {/* Panel Content */}
@@ -399,6 +411,7 @@ export function Dashboard() {
           {rightPanelView === 'status' && <StatusPanel />}
           {rightPanelView === 'testing' && <TestingPanel />}
           {rightPanelView === 'report' && <TestReportPanel />}
+          {rightPanelView === 'suites' && <TestSuitesPanel />}
         </div>
       </div>
       

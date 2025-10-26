@@ -169,6 +169,41 @@ import {
           const reportData = await apiService.getTestReport(testingSessionId);
           setTestReport(reportData.report);
           
+          // Extract fixes from report and assign unique IDs
+          const fixes = reportData.report?.recommendations?.map((rec: any, index: number) => ({
+            ...rec,
+            id: `fix-${testingSessionId}-${index}`,
+            status: 'pending',
+          })) || [];
+          
+          // Create test session with fixes
+          const sessionColor = useStore.getState().testCollections
+            .flatMap(c => c.testSessions || []).length % 10;
+          const SESSION_COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#14b8a6'];
+          
+          const testSession = {
+            id: testingSessionId,
+            name: reportData.report.collection_name || `Test Session ${new Date().toLocaleDateString()}`,
+            color: SESSION_COLORS[sessionColor],
+            testCases: data.test_cases?.map((tc: any) => tc.id) || [],
+            testReport: reportData.report,
+            createdAt: new Date().toISOString(),
+            completedAt: new Date().toISOString(),
+            metadata: {
+              totalTests: reportData.report.summary?.total_tests || 0,
+              passedTests: reportData.report.summary?.passed || 0,
+              failedTests: reportData.report.summary?.failed || 0,
+              warningTests: reportData.report.summary?.warnings || 0,
+              successRate: reportData.report.summary?.success_rate || 0,
+              totalFixes: fixes.length,
+              pendingFixes: fixes.length,
+              acceptedFixes: 0,
+              rejectedFixes: 0,
+            },
+            fixes,
+            fixesLocked: fixes.length > 0, // Lock if there are fixes
+          };
+          
           // Save collection to localStorage
           if (reportData.report && data.test_cases) {
             const collection = {
@@ -187,8 +222,16 @@ import {
                 failedTests: reportData.report.summary?.failed || 0,
                 successRate: reportData.report.summary?.success_rate || 0,
               },
+              testSessions: [testSession],
+              activeSessionIds: [testingSessionId],
             };
             addTestCollection(collection);
+            
+            // Auto-open Progress Report Modal (forces user to review fixes)
+            setTimeout(() => {
+              useStore.getState().setShowProgressReport(true, testingSessionId);
+              useStore.getState().toggleSessionVisibility(testingSessionId); // Make session visible
+            }, 1000); // Delay to allow collection to be saved
           }
           
           // Highlight failed/warning tests in canvas for visualization

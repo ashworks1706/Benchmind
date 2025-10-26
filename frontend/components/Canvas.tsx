@@ -5,6 +5,8 @@ import { useStore } from '@/lib/store';
 import { Agent, Tool, TestCase, Relationship } from '@/types';
 import { getTestCaseColor } from '@/lib/testColors';
 import { calculateAgentCost, calculateToolCost, calculateConnectionCost, formatCost, getCostColor } from '@/lib/costCalculator';
+import { SessionSelector } from './SessionSelector';
+import { ResearchReportModal } from './ResearchReportModal';
 
 interface CanvasNode {
   id: string;
@@ -26,7 +28,30 @@ interface CanvasEdge {
 }
 
 export function Canvas() {
-  const { agentData, isLoading, loadingMessage, isGeneratingTests, highlightedElements, errorHighlightedElements, warningHighlightedElements, setSelectedElement, setPanelView, testCases, pendingTestCases, testResults, currentTestIndex, isTestingInProgress, currentRunningTestId } = useStore();
+  const { 
+    agentData, 
+    isLoading, 
+    loadingMessage, 
+    isGeneratingTests, 
+    highlightedElements, 
+    errorHighlightedElements, 
+    warningHighlightedElements, 
+    setSelectedElement, 
+    setPanelView, 
+    testCases, 
+    pendingTestCases, 
+    testResults, 
+    currentTestIndex, 
+    isTestingInProgress, 
+    currentRunningTestId,
+    testCollections,
+    visibleSessionIds,
+    showProgressReport,
+    currentProgressSessionId,
+    setShowProgressReport,
+    acceptFix,
+    rejectFix,
+  } = useStore();
   const canvasRef = useRef<HTMLDivElement>(null);
   const [nodes, setNodes] = useState<CanvasNode[]>([]);
   const [edges, setEdges] = useState<CanvasEdge[]>([]);
@@ -512,9 +537,16 @@ export function Canvas() {
             const isAgentTool = edge.type === 'agent-tool';
             const isTestTarget = edge.type === 'test-target';
             
-            // Use edge.color for test-target edges
-            let color = isTestTarget && edge.color ? edge.color : (isAgentTool ? '#10b981' : '#ef4444');
-            const strokeWidth = isAgentTool ? 3 : isTestTarget ? 2 : 4;
+            // Check if this is an edge from the currently running test
+            const isRunningTestEdge = currentRunningTestId && isTestTarget && 
+              edge.from.type === 'test' && 
+              (edge.from.data as TestCase).id === currentRunningTestId;
+            
+            const testColor = isRunningTestEdge && currentTestColor ? currentTestColor : null;
+            
+            // Use test-specific color for running test edges, otherwise use edge.color or defaults
+            let color = testColor?.primary || (isTestTarget && edge.color ? edge.color : (isAgentTool ? '#10b981' : '#ef4444'));
+            const strokeWidth = isRunningTestEdge ? 4 : (isAgentTool ? 3 : isTestTarget ? 2 : 4);
             
             // Check if this edge should be highlighted
             const isEdgeHighlighted = edge.data && highlightedElements.has(edge.data.id);
@@ -645,8 +677,11 @@ export function Canvas() {
                       textAnchor="middle"
                       fontSize="11"
                       fontWeight="600"
-                      className="pointer-events-none select-none"
+                      className="pointer-events-auto cursor-help select-none"
                     >
+                      <title>
+                        {`Connection Cost: ${formatCost(calculateConnectionCost(edge.data).totalCost)}/day | Data transfer overhead | Est. ${calculateConnectionCost(edge.data).apiCalls} calls/day | ${calculateConnectionCost(edge.data).inputTokens} tokens | Click connection for detailed breakdown`}
+                      </title>
                       <tspan
                         x={(fromX + toX) / 2}
                         style={{
@@ -686,21 +721,50 @@ export function Canvas() {
           const isRunningTest = isTest && isTestingInProgress && 
             testCases[currentTestIndex]?.id === (node.data as TestCase).id;
           
+          // Check if this node is a target of the currently running test
+          const isRunningTestTarget = currentRunningTestId && !isTest && 
+            edges.some(e => 
+              e.type === 'test-target' && 
+              e.from.type === 'test' &&
+              (e.from.data as TestCase).id === currentRunningTestId &&
+              e.to.id === node.id
+            );
+          
           // Check if test has results
           const testResult = isTest ? testResults.get((node.data as TestCase).id) : null;
+          
+          // Find test session color for this test node
+          let sessionGradient: string | null = null;
+          if (isTest) {
+            const testId = (node.data as TestCase).id;
+            // Find session containing this test that is visible
+            const visibleSessions = testCollections
+              .flatMap(c => c.testSessions || [])
+              .filter(s => visibleSessionIds.includes(s.id) && s.testCases.includes(testId));
+            // Use first visible session's color (priority to most recently added)
+            if (visibleSessions.length > 0) {
+              sessionGradient = visibleSessions[visibleSessions.length - 1].color;
+            }
+          }
           
           // Determine styling based on highlight state
           let borderClass = '';
           let bgClass = '';
           let effectClass = '';
+          let customStyle: React.CSSProperties = {};
           
           if (isTest) {
             // Test node styling
             if (isRunningTest || isHighlighted) {
-              // Running or explicitly highlighted
-              borderClass = 'border-blue-500';
-              bgClass = 'bg-blue-50 dark:bg-blue-900/20';
-              effectClass = 'shadow-xl scale-110 ring-4 ring-blue-500/50 animate-pulse';
+              // Running or explicitly highlighted - use test-specific color
+              const testColor = currentTestColor || getTestCaseColor(currentTestIndex);
+              borderClass = '';
+              bgClass = testColor.bg;
+              effectClass = `shadow-xl scale-110 ring-4 animate-pulse ${testColor.ring}`;
+              customStyle.borderColor = testColor.primary;
+              customStyle.borderWidth = '2px';
+              customStyle.borderStyle = 'solid';
+              customStyle.boxShadow = `0 0 20px ${testColor.glow}`;
             } else if (testResult) {
               if (testResult.status === 'passed') {
                 borderClass = 'border-green-500';
@@ -715,6 +779,14 @@ export function Canvas() {
                 bgClass = 'bg-amber-50 dark:bg-amber-900/20';
                 effectClass = 'hover:scale-105';
               }
+            } else if (sessionGradient) {
+              // Use session gradient color if test belongs to visible session
+              borderClass = 'border-transparent';
+              effectClass = 'hover:scale-105 shadow-lg';
+              customStyle.background = sessionGradient;
+              customStyle.borderImage = `${sessionGradient} 1`;
+              customStyle.borderWidth = '2px';
+              customStyle.borderStyle = 'solid';
             } else {
               borderClass = 'border-purple-500/60 hover:border-purple-500';
               bgClass = 'bg-linear-to-br from-purple-50 to-violet-50 dark:from-purple-950/50 dark:to-violet-950/50';
@@ -729,6 +801,16 @@ export function Canvas() {
             borderClass = 'border-orange-500';
             bgClass = 'bg-orange-50 dark:bg-orange-900/20';
             effectClass = 'shadow-lg ring-2 ring-orange-500/50';
+          } else if (isRunningTestTarget) {
+            // Highlight target nodes with test-specific color
+            const testColor = currentTestColor || getTestCaseColor(currentTestIndex);
+            borderClass = '';
+            bgClass = testColor.bg;
+            effectClass = `shadow-lg scale-105 ring-2 ${testColor.ring}`;
+            customStyle.borderColor = testColor.primary;
+            customStyle.borderWidth = '2px';
+            customStyle.borderStyle = 'solid';
+            customStyle.boxShadow = `0 0 15px ${testColor.glow}`;
           } else if (isHighlighted) {
             borderClass = 'border-yellow-400';
             bgClass = 'bg-yellow-50 dark:bg-yellow-900/20';
@@ -758,6 +840,7 @@ export function Canvas() {
                 top: node.y,
                 width: node.width,
                 backdropFilter: 'blur(10px)',
+                ...customStyle,
               }}
               onMouseDown={(e) => handleNodeMouseDown(e, node)}
               onClick={(e) => {
@@ -826,6 +909,35 @@ export function Canvas() {
       <div className="absolute top-4 right-4 bg-background/90 border border-border rounded-lg shadow-lg px-3 py-2 text-sm backdrop-blur">
         Zoom: {Math.round(transform.scale * 100)}%
       </div>
+
+      {/* Session Selector */}
+      <SessionSelector />
+
+      {/* Research Report Modal - Shows test session details with fix review */}
+      {showProgressReport && currentProgressSessionId && (() => {
+        const session = testCollections
+          .flatMap(c => c.testSessions || [])
+          .find(s => s.id === currentProgressSessionId);
+        
+        if (!session) return null;
+        
+        // Reconstruct test cases from store using IDs
+        const sessionTestCases = session.testCases
+          .map(tcId => testCases.find(tc => tc.id === tcId))
+          .filter((tc): tc is TestCase => tc !== undefined);
+        
+        return (
+          <ResearchReportModal
+            testReport={session.testReport}
+            testCases={sessionTestCases}
+            fixes={session.fixes || []}
+            onClose={() => useStore.getState().setShowProgressReport(false)}
+            onAcceptFix={(fixId) => acceptFix(currentProgressSessionId, fixId)}
+            onRejectFix={(fixId) => rejectFix(currentProgressSessionId, fixId)}
+            canExport={session.fixes?.every(f => f.status !== 'pending') ?? true}
+          />
+        );
+      })()}
     </div>
   );
 }
@@ -859,7 +971,10 @@ function AgentNode({ data }: { data: Agent }) {
             </span>
           </div>
         )}
-        <div className={`text-xs font-bold ${getCostColor(cost.totalCost)}`}>
+        <div 
+          className={`text-xs font-bold ${getCostColor(cost.totalCost)}`}
+          title={`Agent Cost: ${formatCost(cost.totalCost)}/day | Based on ${cost.model} model | Est. ${cost.apiCalls} API calls/day | ${cost.inputTokens} input + ${cost.outputTokens} output tokens | Click for detailed breakdown`}
+        >
           💰 {formatCost(cost.totalCost)}/day
         </div>
       </div>
@@ -879,7 +994,10 @@ function ToolNode({ data }: { data: Tool }) {
       <span className="text-xs font-semibold text-green-700 dark:text-green-300 text-center line-clamp-2 leading-tight">
         {data.name}
       </span>
-      <span className={`text-[10px] font-bold ${getCostColor(cost.totalCost)}`}>
+      <span 
+        className={`text-[10px] font-bold ${getCostColor(cost.totalCost)}`}
+        title={`Tool Cost: ${formatCost(cost.totalCost)}/day | Execution overhead only | Est. ${cost.apiCalls} calls/day | Tools don't use LLM tokens | Click for detailed breakdown`}
+      >
         {formatCost(cost.totalCost)}/day
       </span>
     </div>

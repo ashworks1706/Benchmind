@@ -107,6 +107,7 @@ export interface TestResult {
 }
 
 export interface Fix {
+  id: string; // Add unique ID for tracking
   severity: 'critical' | 'high' | 'medium' | 'low';
   category?: string;
   issue: string;
@@ -118,6 +119,8 @@ export interface Fix {
     suggested_code: string;
     explanation: string;
   };
+  status?: 'pending' | 'accepted' | 'rejected'; // Track user decision
+  decidedAt?: string; // Timestamp of decision
 }
 
 // Types for UI State

@@ -1,20 +1,65 @@
 'use client';
 
-import { X, Download, Printer } from 'lucide-react';
+import { X, Download, Printer, Check, XCircle as XIcon, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { TestCase } from '@/types';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  LineChart,
+  Line,
+} from 'recharts';
+
+interface Fix {
+  id: string;
+  file_path?: string;
+  description: string;
+  current_code?: string;
+  suggested_code?: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  status: 'pending' | 'accepted' | 'rejected';
+  test_name?: string;
+  timestamp?: string;
+}
 
 interface ResearchReportModalProps {
   testReport: any;
   testCases: TestCase[];
+  fixes?: Fix[];
   onClose: () => void;
+  onAcceptFix?: (fixId: string) => void;
+  onRejectFix?: (fixId: string) => void;
+  canExport?: boolean;
 }
 
-export function ResearchReportModal({ testReport, testCases, onClose }: ResearchReportModalProps) {
+export function ResearchReportModal({
+  testReport,
+  testCases,
+  fixes = [],
+  onClose,
+  onAcceptFix,
+  onRejectFix,
+  canExport = true,
+}: ResearchReportModalProps) {
   const reportRef = useRef<HTMLDivElement>(null);
+  const [expandedFix, setExpandedFix] = useState<string | null>(null);
+  
+  const pendingFixes = fixes.filter((f) => f.status === 'pending');
+  const hasUnreviewedFixes = pendingFixes.length > 0;
+  
+  const COLORS = ['#10b981', '#ef4444', '#f59e0b', '#3b82f6'];
 
   const handleExportPDF = async () => {
     if (!reportRef.current) return;
@@ -349,13 +394,13 @@ export function ResearchReportModal({ testReport, testCases, onClose }: Research
           {/* Recommendations & Suggested Fixes */}
           {testReport.recommendations && testReport.recommendations.length > 0 && (
             <section className="space-y-4">
-              <h2 className="text-2xl font-bold border-b pb-2">4. Recommendations & Suggested Fixes</h2>
+              <h2 className="text-2xl font-bold border-b pb-2">5. Recommendations & Suggested Fixes</h2>
               
               {/* Critical Issues */}
               {testReport.critical_issues && testReport.critical_issues.length > 0 && (
                 <div className="mb-6">
                   <h3 className="text-xl font-semibold mb-3 text-red-600 dark:text-red-400">
-                    4.1 Critical Issues
+                    5.1 Critical Issues
                   </h3>
                   <div className="space-y-3">
                     {testReport.critical_issues.map((issue: any, idx: number) => (
@@ -390,7 +435,7 @@ export function ResearchReportModal({ testReport, testCases, onClose }: Research
 
               {/* All Recommendations */}
               <div>
-                <h3 className="text-xl font-semibold mb-3">4.2 Improvement Recommendations</h3>
+                <h3 className="text-xl font-semibold mb-3">5.2 Improvement Recommendations</h3>
                 <div className="space-y-3">
                   {testReport.recommendations.slice(0, 10).map((rec: any, idx: number) => {
                     const severityColors: any = {
@@ -441,6 +486,274 @@ export function ResearchReportModal({ testReport, testCases, onClose }: Research
               </div>
             </section>
           )}
+
+          {/* Fix Review Section - Interactive */}
+          {fixes.length > 0 && (
+            <section className="space-y-4 print:hidden">
+              <h2 className="text-2xl font-bold border-b pb-2">6. Fix Review & Approval</h2>
+              
+              {hasUnreviewedFixes && (
+                <div className="p-4 bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-300 dark:border-yellow-700 rounded">
+                  <p className="text-sm font-semibold text-yellow-900 dark:text-yellow-100">
+                    ⚠️ You have {pendingFixes.length} pending fix{pendingFixes.length > 1 ? 'es' : ''} requiring review.
+                    Please accept or reject each fix before exporting the report.
+                  </p>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                {fixes.map((fix) => {
+                  const isExpanded = expandedFix === fix.id;
+                  const severityEmoji = {
+                    critical: '🔴',
+                    high: '🟠',
+                    medium: '🟡',
+                    low: '🟢',
+                  }[fix.severity];
+
+                  return (
+                    <div
+                      key={fix.id}
+                      className={`border rounded-lg overflow-hidden ${
+                        fix.status === 'accepted'
+                          ? 'border-green-300 bg-green-50 dark:bg-green-950/20'
+                          : fix.status === 'rejected'
+                          ? 'border-red-300 bg-red-50 dark:bg-red-950/20'
+                          : 'border-yellow-300 bg-yellow-50 dark:bg-yellow-950/20'
+                      }`}
+                    >
+                      {/* Fix Header */}
+                      <div className="p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-lg">{severityEmoji}</span>
+                              <span className="text-xs font-bold uppercase px-2 py-1 rounded bg-white dark:bg-gray-900">
+                                {fix.severity}
+                              </span>
+                              {fix.test_name && (
+                                <span className="text-xs text-gray-600 dark:text-gray-400">
+                                  {fix.test_name}
+                                </span>
+                              )}
+                            </div>
+                            <h4 className="font-semibold mb-1">{fix.description}</h4>
+                            {fix.file_path && (
+                              <p className="text-xs text-gray-600 dark:text-gray-400 font-mono">
+                                📁 {fix.file_path}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Status Badge */}
+                          <div className="flex items-center gap-2">
+                            {fix.status === 'accepted' && (
+                              <div className="flex items-center gap-1 text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900/30 px-3 py-1 rounded-full">
+                                <Check className="w-4 h-4" />
+                                <span className="text-xs font-semibold">Accepted</span>
+                              </div>
+                            )}
+                            {fix.status === 'rejected' && (
+                              <div className="flex items-center gap-1 text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/30 px-3 py-1 rounded-full">
+                                <XIcon className="w-4 h-4" />
+                                <span className="text-xs font-semibold">Rejected</span>
+                              </div>
+                            )}
+                            {fix.status === 'pending' && (
+                              <div className="flex items-center gap-1 text-yellow-700 dark:text-yellow-300 bg-yellow-100 dark:bg-yellow-900/30 px-3 py-1 rounded-full">
+                                <Clock className="w-4 h-4" />
+                                <span className="text-xs font-semibold">Pending</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        {fix.status === 'pending' && (
+                          <div className="flex items-center gap-2 mt-3">
+                            <Button
+                              size="sm"
+                              variant="default"
+                              className="bg-green-600 hover:bg-green-700"
+                              onClick={() => onAcceptFix?.(fix.id)}
+                            >
+                              <Check className="w-4 h-4 mr-1" />
+                              Accept
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => onRejectFix?.(fix.id)}
+                            >
+                              <XIcon className="w-4 h-4 mr-1" />
+                              Reject
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setExpandedFix(isExpanded ? null : fix.id)}
+                            >
+                              {isExpanded ? 'Hide' : 'View'} Details
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Expanded Code Diff */}
+                      {isExpanded && (fix.current_code || fix.suggested_code) && (
+                        <div className="border-t border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 p-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            {/* Current Code */}
+                            {fix.current_code && (
+                              <div>
+                                <h5 className="text-xs font-semibold mb-2 text-red-700 dark:text-red-400">
+                                  Current Code
+                                </h5>
+                                <pre className="text-xs font-mono bg-red-50 dark:bg-red-950/30 p-3 rounded border border-red-200 dark:border-red-800 overflow-x-auto">
+                                  {fix.current_code}
+                                </pre>
+                              </div>
+                            )}
+
+                            {/* Suggested Code */}
+                            {fix.suggested_code && (
+                              <div>
+                                <h5 className="text-xs font-semibold mb-2 text-green-700 dark:text-green-400">
+                                  Suggested Code
+                                </h5>
+                                <pre className="text-xs font-mono bg-green-50 dark:bg-green-950/30 p-3 rounded border border-green-200 dark:border-green-800 overflow-x-auto">
+                                  {fix.suggested_code}
+                                </pre>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* Chart Analysis Section */}
+          <section className="space-y-4">
+            <h2 className="text-2xl font-bold border-b pb-2">7. Statistical Analysis & Visualizations</h2>
+            
+            {/* Test Results Distribution */}
+            <div className="space-y-4">
+              <h3 className="text-xl font-semibold">7.1 Test Results Distribution</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Pie Chart */}
+                <div className="border rounded-lg p-4">
+                  <h4 className="text-sm font-semibold mb-3 text-center">Overall Test Results</h4>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <PieChart>
+                      <Pie
+                        data={[
+                          { name: 'Passed', value: testReport.summary.passed },
+                          { name: 'Failed', value: testReport.summary.failed },
+                          { name: 'Warnings', value: testReport.summary.warnings || 0 },
+                        ]}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        {[0, 1, 2].map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Bar Chart - Category Performance */}
+                {testReport.category_performance && testReport.category_performance.length > 0 && (
+                  <div className="border rounded-lg p-4">
+                    <h4 className="text-sm font-semibold mb-3 text-center">Category Performance vs Benchmark</h4>
+                    <ResponsiveContainer width="100%" height={250}>
+                      <BarChart
+                        data={testReport.category_performance.map((cat: any) => ({
+                          name: cat.category.replace(/_/g, ' ').substring(0, 15),
+                          score: cat.average_score,
+                          benchmark: cat.benchmark,
+                        }))}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} fontSize={10} />
+                        <YAxis />
+                        <Tooltip />
+                        <Legend />
+                        <Bar dataKey="score" fill="#3b82f6" name="Actual Score" />
+                        <Bar dataKey="benchmark" fill="#f59e0b" name="Benchmark" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Agent Performance Trends */}
+            {testReport.agent_performance && testReport.agent_performance.length > 0 && (
+              <div className="space-y-4">
+                <h3 className="text-xl font-semibold">7.2 Agent Performance Comparison</h3>
+                <div className="border rounded-lg p-4">
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart
+                      data={testReport.agent_performance.map((agent: any) => ({
+                        name: agent.name.substring(0, 20),
+                        passed: agent.passed,
+                        failed: agent.failed,
+                        successRate: agent.tests_run > 0 ? (agent.passed / agent.tests_run * 100).toFixed(1) : 0,
+                      }))}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" angle={-30} textAnchor="end" height={100} fontSize={11} />
+                      <YAxis />
+                      <Tooltip />
+                      <Legend />
+                      <Bar dataKey="passed" stackId="a" fill="#10b981" name="Passed Tests" />
+                      <Bar dataKey="failed" stackId="a" fill="#ef4444" name="Failed Tests" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+
+            {/* Performance Metrics Timeline */}
+            {testReport.test_results && testReport.test_results.length > 5 && (
+              <div className="space-y-4">
+                <h3 className="text-xl font-semibold">7.3 Performance Metrics Over Test Sequence</h3>
+                <div className="border rounded-lg p-4">
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart
+                      data={testReport.test_results.slice(0, 20).map((result: any, idx: number) => {
+                        const avgScore = result.metrics 
+                          ? result.metrics.reduce((acc: number, m: any) => acc + (m.passed ? 100 : 0), 0) / result.metrics.length
+                          : 0;
+                        return {
+                          test: `T${idx + 1}`,
+                          score: avgScore,
+                        };
+                      })}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="test" fontSize={10} />
+                      <YAxis domain={[0, 100]} />
+                      <Tooltip />
+                      <Legend />
+                      <Line type="monotone" dataKey="score" stroke="#8b5cf6" strokeWidth={2} name="Success Rate (%)" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+          </section>
 
           {/* References */}
           <section className="space-y-4">

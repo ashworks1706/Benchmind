@@ -44,6 +44,9 @@ interface AppState {
   testCollections: TestCollection[];
   activeCollectionId: string | null;
   showReportModal: boolean;
+  showProgressReport: boolean; // For progress report modal
+  currentProgressSessionId: string | null; // Current session in progress report
+  visibleSessionIds: string[]; // IDs of sessions currently displayed on canvas
   
   // Change Queue
   queuedChanges: Array<{
@@ -82,6 +85,7 @@ interface AppState {
   deleteTestCollection: (id: string) => void;
   setActiveCollection: (id: string | null) => void;
   setShowReportModal: (show: boolean) => void;
+  setShowProgressReport: (show: boolean, sessionId?: string) => void;
   
   // Testing Session Actions
   setTestingSessionId: (id: string | null) => void;
@@ -95,6 +99,18 @@ interface AppState {
   addQueuedChange: (change: Omit<AppState['queuedChanges'][0], 'id' | 'timestamp'>) => void;
   removeQueuedChange: (id: string) => void;
   clearQueuedChanges: () => void;
+  
+  // Fix Management Actions
+  acceptFix: (fixId: string, sessionId: string) => void;
+  rejectFix: (fixId: string, sessionId: string) => void;
+  queueFixApplication: (fix: any) => void;
+  hasPendingFixes: () => boolean;
+  canExportReport: () => boolean;
+  
+  // Multi-Session Actions
+  addTestSession: (session: any) => void;
+  toggleSessionVisibility: (sessionId: string) => void;
+  getVisibleSessions: () => string[];
   
   loadFromLocalStorage: () => void;
   clearLocalStorage: () => void;
@@ -135,6 +151,9 @@ export const useStore = create<AppState>((set) => ({
   testCollections: [],
   activeCollectionId: null,
   showReportModal: false,
+  showProgressReport: false,
+  currentProgressSessionId: null,
+  visibleSessionIds: [],
   
   // Change Queue
   queuedChanges: [],
@@ -306,6 +325,11 @@ export const useStore = create<AppState>((set) => ({
   
   setShowReportModal: (show) => set({ showReportModal: show }),
   
+  setShowProgressReport: (show, sessionId) => set({ 
+    showProgressReport: show, 
+    currentProgressSessionId: sessionId || null 
+  }),
+  
   loadFromLocalStorage: () => {
     if (typeof window !== 'undefined') {
       try {
@@ -382,5 +406,139 @@ export const useStore = create<AppState>((set) => ({
       isTestingInProgress: false,
       currentTestIndex: -1,
     });
+  },
+  
+  // Fix Management Actions
+  acceptFix: (fixId, sessionId) => set((state) => {
+    const collection = state.testCollections.find(c => 
+      c.testSessions?.some(s => s.id === sessionId)
+    );
+    if (!collection) return state;
+    
+    const updatedCollections = state.testCollections.map(c => {
+      if (c.id !== collection.id) return c;
+      
+      return {
+        ...c,
+        testSessions: c.testSessions?.map(s => {
+          if (s.id !== sessionId) return s;
+          
+          return {
+            ...s,
+            fixes: s.fixes.map((f: any) => 
+              f.id === fixId 
+                ? { ...f, status: 'accepted', decidedAt: new Date().toISOString() }
+                : f
+            ),
+            metadata: {
+              ...s.metadata,
+              pendingFixes: s.metadata.pendingFixes - 1,
+              acceptedFixes: s.metadata.acceptedFixes + 1,
+            }
+          };
+        })
+      };
+    });
+    
+    return { testCollections: updatedCollections };
+  }),
+  
+  rejectFix: (fixId, sessionId) => set((state) => {
+    const collection = state.testCollections.find(c => 
+      c.testSessions?.some(s => s.id === sessionId)
+    );
+    if (!collection) return state;
+    
+    const updatedCollections = state.testCollections.map(c => {
+      if (c.id !== collection.id) return c;
+      
+      return {
+        ...c,
+        testSessions: c.testSessions?.map(s => {
+          if (s.id !== sessionId) return s;
+          
+          return {
+            ...s,
+            fixes: s.fixes.map((f: any) => 
+              f.id === fixId 
+                ? { ...f, status: 'rejected', decidedAt: new Date().toISOString() }
+                : f
+            ),
+            metadata: {
+              ...s.metadata,
+              pendingFixes: s.metadata.pendingFixes - 1,
+              rejectedFixes: s.metadata.rejectedFixes + 1,
+            }
+          };
+        })
+      };
+    });
+    
+    return { testCollections: updatedCollections };
+  }),
+  
+  queueFixApplication: (fix) => set((state) => ({
+    queuedChanges: [
+      ...state.queuedChanges,
+      {
+        id: `fix-${Date.now()}`,
+        type: 'fix' as const,
+        description: `Apply fix: ${fix.issue}`,
+        data: fix,
+        timestamp: Date.now(),
+      }
+    ]
+  })),
+  
+  hasPendingFixes: () => {
+    const { testCollections } = useStore.getState();
+    return testCollections.some((c: TestCollection) => 
+      c.testSessions?.some((s: any) => 
+        s.metadata.pendingFixes > 0
+      )
+    );
+  },
+  
+  canExportReport: () => {
+    const { testCollections } = useStore.getState();
+    // Can only export if no pending fixes exist
+    return !testCollections.some((c: TestCollection) => 
+      c.testSessions?.some((s: any) => s.metadata.pendingFixes > 0)
+    );
+  },
+  
+  // Multi-Session Actions
+  addTestSession: (session) => set((state) => {
+    const activeCollection = state.testCollections.find(c => c.id === state.activeCollectionId);
+    if (!activeCollection) return state;
+    
+    const updatedCollections = state.testCollections.map(c => {
+      if (c.id !== activeCollection.id) return c;
+      
+      return {
+        ...c,
+        testSessions: [...(c.testSessions || []), session],
+        activeSessionIds: [...(c.activeSessionIds || []), session.id],
+      };
+    });
+    
+    return { 
+      testCollections: updatedCollections,
+      visibleSessionIds: [...state.visibleSessionIds, session.id]
+    };
+  }),
+  
+  toggleSessionVisibility: (sessionId) => set((state) => {
+    const isVisible = state.visibleSessionIds.includes(sessionId);
+    return {
+      visibleSessionIds: isVisible
+        ? state.visibleSessionIds.filter(id => id !== sessionId)
+        : [...state.visibleSessionIds, sessionId]
+    };
+  }),
+  
+  getVisibleSessions: () => {
+    const state = useStore.getState();
+    return state.visibleSessionIds;
   },
 }));
