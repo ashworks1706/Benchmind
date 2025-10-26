@@ -36,7 +36,13 @@ export default function ProjectDetailPage() {
     reset,
     setCurrentAnalysisId,
     setTestCases,
+    loadFromLocalStorage,
   } = useStore();
+
+  useEffect(() => {
+    console.log('[ProjectDetailPage] Initializing store from localStorage');
+    loadFromLocalStorage();
+  }, [loadFromLocalStorage]);
 
   // Load project data
   useEffect(() => {
@@ -49,6 +55,8 @@ export default function ProjectDetailPage() {
         // Check if there's an ongoing analysis for this project
         const analysisId = (projectData.config as any)?.analysisId;
         if (analysisId && !agentData) {
+          setCurrentAnalysisId(analysisId);
+          loadFromLocalStorage();
           // Resume polling for the saved analysis
           setLoading(true, '🔄 Resuming analysis...');
           addStatusMessage({

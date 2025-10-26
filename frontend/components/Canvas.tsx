@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useStore } from '@/lib/store';
 import { Agent, Tool, TestCase, Relationship } from '@/types';
 import { getTestCaseColor } from '@/lib/testColors';
@@ -63,6 +63,38 @@ export function Canvas() {
 
   // Use pendingTestCases or testCases - whichever has data
   const activeTestCases = pendingTestCases.length > 0 ? pendingTestCases : testCases;
+  
+    // Get test cases from visible sessions - wrapped in useMemo to avoid recreating on every render
+  const allDisplayedTestCases = useMemo(() => {
+    // If actively generating tests, show those ONLY (the pending ones being generated)
+    if (isGeneratingTests && pendingTestCases.length > 0) {
+      console.log('[Canvas] Showing pending test cases (generating):', pendingTestCases.length);
+      return pendingTestCases;
+    }
+    
+    // Otherwise, only show test cases from visible sessions (NOT from store's testCases)
+    const visibleSessionTestCases: TestCase[] = [];
+    
+    console.log('[Canvas] Computing visible session test cases');
+    console.log('[Canvas] visibleSessionIds:', visibleSessionIds);
+    console.log('[Canvas] testCollections:', testCollections);
+    
+    testCollections.forEach(collection => {
+      console.log('[Canvas] Checking collection:', collection.id, 'sessions:', collection.testSessions?.length);
+      collection.testSessions?.forEach(session => {
+        console.log('[Canvas] Session:', session.id, 'visible?', visibleSessionIds.includes(session.id));
+        if (visibleSessionIds.includes(session.id)) {
+          console.log('[Canvas] Adding test cases from session:', session.id, 'count:', session.testCases?.length);
+          if (session.testCases && Array.isArray(session.testCases)) {
+            visibleSessionTestCases.push(...session.testCases);
+          }
+        }
+      });
+    });
+    
+    console.log('[Canvas] Showing visible session test cases:', visibleSessionTestCases.length);
+    return visibleSessionTestCases;
+  }, [pendingTestCases, testCollections, visibleSessionIds, isGeneratingTests]);
   
   // Get the color for the currently running test
   const currentTestColor = currentRunningTestId 
@@ -215,12 +247,17 @@ export function Canvas() {
       });
       return;
     }
-    
-    if (!activeTestCases || activeTestCases.length === 0) return;
 
     setNodes(prevNodes => {
       // Remove old test nodes
       const nonTestNodes = prevNodes.filter(n => n.type !== 'test');
+      
+      // If no test cases to display, just return non-test nodes (removes all test nodes)
+      if (!allDisplayedTestCases || allDisplayedTestCases.length === 0) {
+        // Also clear test edges
+        setEdges(prevEdges => prevEdges.filter(e => e.type !== 'test-target'));
+        return nonTestNodes;
+      }
       
       // Calculate the rightmost position from existing nodes
       const maxX = nonTestNodes.reduce((max, node) => Math.max(max, node.x + node.width), 0);
@@ -231,7 +268,7 @@ export function Canvas() {
       const horizontalSpacing = 250; // Space between columns
       const verticalSpacing = 180; // Space between rows
       
-      activeTestCases.forEach((testCase, idx) => {
+      allDisplayedTestCases.forEach((testCase, idx) => {
         // Alternate between top and bottom rows
         const isTopRow = idx % 2 === 0;
         const col = Math.floor(idx / 2); // Two tests per column pair
@@ -256,7 +293,7 @@ export function Canvas() {
         const nonTestEdges = prevEdges.filter(e => e.type !== 'test-target');
         const testEdges: CanvasEdge[] = [];
 
-        activeTestCases.forEach((testCase) => {
+        allDisplayedTestCases.forEach((testCase) => {
           const testNodeId = `test-${testCase.id}`;
           const targetIds = testCase.highlight_elements || [];
           
@@ -274,14 +311,9 @@ export function Canvas() {
             if (targetNode) {
               // Determine color based on test result
               const result = testResults.get(testCase.id);
-              let color = '#6b7280'; // default gray
-              if (result) {
-                if (result.status === 'passed') color = '#22c55e'; // green
-                else if (result.status === 'failed') color = '#ef4444'; // red
-                else if (result.status === 'warning') color = '#f59e0b'; // amber
-              } else if (isTestingInProgress && activeTestCases[currentTestIndex]?.id === testCase.id) {
-                color = '#3b82f6'; // blue for currently running
-              }
+              const color = result 
+                ? (result.status === 'passed' ? '#22c55e' : result.status === 'failed' ? '#ef4444' : '#f59e0b')
+                : (isTestingInProgress && activeTestCases[currentTestIndex]?.id === testCase.id ? '#3b82f6' : '#6b7280');
 
               testEdges.push({
                 id: `test-edge-${testCase.id}-${targetId}`,
@@ -299,7 +331,7 @@ export function Canvas() {
 
       return allNodes;
     });
-  }, [activeTestCases, agentData, testResults, isTestingInProgress, currentTestIndex, isGeneratingTests]);
+  }, [allDisplayedTestCases, agentData, testResults, isTestingInProgress, currentTestIndex, isGeneratingTests, activeTestCases]);
 
   // Update edge references when nodes move
   useEffect(() => {
@@ -749,7 +781,7 @@ export function Canvas() {
             // Find session containing this test that is visible
             const visibleSessions = testCollections
               .flatMap(c => c.testSessions || [])
-              .filter(s => visibleSessionIds.includes(s.id) && s.testCases.includes(testId));
+              .filter(s => visibleSessionIds.includes(s.id) && s.testCases?.some(tc => tc.id === testId));
             // Use first visible session's color (priority to most recently added)
             if (visibleSessions.length > 0) {
               sessionGradient = visibleSessions[visibleSessions.length - 1].color;
@@ -928,12 +960,24 @@ export function Canvas() {
           .flatMap(c => c.testSessions || [])
           .find(s => s.id === currentProgressSessionId);
         
-        if (!session) return null;
+        console.log('[Canvas] Research Report Modal - session:', session);
+        console.log('[Canvas] testReport exists:', !!session?.testReport);
         
-        // Reconstruct test cases from store using IDs
-        const sessionTestCases = session.testCases
-          .map(tcId => testCases.find(tc => tc.id === tcId))
-          .filter((tc): tc is TestCase => tc !== undefined);
+        if (!session) {
+          console.log('[Canvas] No session found for ID:', currentProgressSessionId);
+          return null;
+        }
+        
+        if (!session.testReport) {
+          console.log('[Canvas] No testReport in session:', session.id);
+          return null;
+        }
+        
+        // Use test cases from session directly (already stored as full objects)
+        const sessionTestCases: TestCase[] = session.testCases || [];
+        
+        console.log('[Canvas] Session test cases count:', sessionTestCases.length);
+        console.log('[Canvas] Rendering ResearchReportModal');
         
         return (
           <ResearchReportModal
@@ -941,8 +985,8 @@ export function Canvas() {
             testCases={sessionTestCases}
             fixes={session.fixes || []}
             onClose={() => useStore.getState().setShowProgressReport(false)}
-            onAcceptFix={(fixId) => acceptFix(currentProgressSessionId, fixId)}
-            onRejectFix={(fixId) => rejectFix(currentProgressSessionId, fixId)}
+            onAcceptFix={(fixId) => acceptFix(fixId, currentProgressSessionId)}
+            onRejectFix={(fixId) => rejectFix(fixId, currentProgressSessionId)}
             canExport={session.fixes?.every(f => f.status !== 'pending') ?? true}
           />
         );

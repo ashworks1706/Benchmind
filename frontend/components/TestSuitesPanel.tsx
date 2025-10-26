@@ -3,10 +3,10 @@
 import { useStore } from '@/lib/store';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
-import { CheckCircle2, XCircle, AlertTriangle, FileText, Calendar } from 'lucide-react';
+import { CheckCircle2, XCircle, AlertTriangle, FileText, Calendar, Plus } from 'lucide-react';
 
 export function TestSuitesPanel() {
-  const { testCollections, setShowProgressReport } = useStore();
+  const { testCollections, setShowProgressReport, setPanelView } = useStore();
 
   const allSessions = testCollections.flatMap(c => 
     (c.testSessions || []).map(session => ({
@@ -15,29 +15,51 @@ export function TestSuitesPanel() {
     }))
   );
 
-  if (allSessions.length === 0) {
-    return (
-      <div className="h-full flex flex-col items-center justify-center p-6 text-center">
-        <FileText className="w-16 h-16 text-muted-foreground mb-4" />
-        <h3 className="text-lg font-semibold mb-2">No Test Sessions</h3>
-        <p className="text-sm text-muted-foreground">
-          Run tests to create test sessions and view their progress reports.
-        </p>
-      </div>
-    );
-  }
+  console.log('[TestSuitesPanel] Render - testCollections:', testCollections);
+  console.log('[TestSuitesPanel] All sessions:', allSessions);
+  console.log('[TestSuitesPanel] Session count:', allSessions.length);
+
+  const handleStartNewTest = () => {
+    // Switch to Testing Suite panel to start a new test
+    setPanelView('testing');
+  };
 
   return (
-    <ScrollArea className="h-full">
-      <div className="p-4 space-y-4">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold">Test Suites</h2>
-          <span className="text-sm text-muted-foreground">
-            {allSessions.length} {allSessions.length === 1 ? 'session' : 'sessions'}
-          </span>
+    <div className="h-full flex flex-col">
+      {/* Header with Start New Test Button */}
+      <div className="p-4 border-b border-border bg-muted/30">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h2 className="text-xl font-bold">Test Suites</h2>
+            <p className="text-xs text-muted-foreground mt-1">
+              {allSessions.length === 0 
+                ? 'No test sessions yet' 
+                : `${allSessions.length} saved ${allSessions.length === 1 ? 'session' : 'sessions'}`
+              }
+            </p>
+          </div>
+          <Button
+            onClick={handleStartNewTest}
+            className="gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Start New Test
+          </Button>
         </div>
+      </div>
 
-        <div className="space-y-3">
+      {/* Sessions List */}
+      {allSessions.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+          <FileText className="w-16 h-16 text-muted-foreground mb-4" />
+          <h3 className="text-lg font-semibold mb-2">No Test Sessions</h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            Click &quot;Start New Test&quot; to create your first test session.
+          </p>
+        </div>
+      ) : (
+        <ScrollArea className="flex-1">
+          <div className="p-4 space-y-3">
           {allSessions.map((session) => {
             const hasUnresolvedFixes = session.metadata.pendingFixes > 0;
             
@@ -142,7 +164,12 @@ export function TestSuitesPanel() {
 
                 {/* View Progress Report Button */}
                 <Button
-                  onClick={() => setShowProgressReport(true, session.id)}
+                  onClick={() => {
+                    console.log('[TestSuitesPanel] Button clicked - sessionId:', session.id);
+                    console.log('[TestSuitesPanel] Session data:', session);
+                    setShowProgressReport(true, session.id);
+                    console.log('[TestSuitesPanel] setShowProgressReport called');
+                  }}
                   className="w-full"
                   variant={hasUnresolvedFixes ? 'default' : 'outline'}
                   style={{
@@ -156,8 +183,9 @@ export function TestSuitesPanel() {
               </div>
             );
           })}
-        </div>
-      </div>
-    </ScrollArea>
+          </div>
+        </ScrollArea>
+      )}
+    </div>
   );
 }

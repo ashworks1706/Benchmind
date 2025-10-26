@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { apiService } from '@/lib/api';
 import {
   AgentData,
   TestCase,
@@ -117,7 +118,7 @@ interface AppState {
   reset: () => void;
 }
 
-export const useStore = create<AppState>((set) => ({
+export const useStore = create<AppState>((set, get) => ({
   // Initial state
   agentData: null,
   currentRepoUrl: null,
@@ -204,7 +205,7 @@ export const useStore = create<AppState>((set) => ({
         ...state.statusMessages,
         {
           ...message,
-          id: Date.now().toString(),
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           timestamp: new Date(),
         },
       ],
@@ -331,6 +332,7 @@ export const useStore = create<AppState>((set) => ({
   }),
   
   loadFromLocalStorage: () => {
+    console.log('[Store] loadFromLocalStorage called');
     if (typeof window !== 'undefined') {
       try {
         const savedData = localStorage.getItem('agentData');
@@ -338,6 +340,14 @@ export const useStore = create<AppState>((set) => ({
         const savedAnalysisId = localStorage.getItem('currentAnalysisId');
         const savedFromCache = localStorage.getItem('fromCache') === 'true';
         const savedCollections = localStorage.getItem('testCollections');
+        
+        console.log('[Store] localStorage values:', {
+          savedData: savedData ? 'exists' : 'null',
+          savedUrl,
+          savedAnalysisId,
+          savedFromCache,
+          savedCollections: savedCollections ? 'exists' : 'null'
+        });
         
         const updates: any = {};
         
@@ -366,51 +376,89 @@ export const useStore = create<AppState>((set) => ({
         
         // Load test sessions from database if we have an analysis ID
         if (savedAnalysisId) {
-          const { apiService } = require('@/lib/api');
+          console.log('[Store] Loading test sessions for analysis:', savedAnalysisId);
           apiService.getTestSessionsByAnalysis(savedAnalysisId)
-            .then((response: any) => {
-              if (response.sessions && response.sessions.length > 0) {
-                // Merge with existing collections or create new one
-                const existingCollections = useStore.getState().testCollections;
-                const updatedCollections = existingCollections.map(collection => {
-                  const sessionsForCollection = response.sessions.filter(
-                    (s: any) => s.analysis_id === savedAnalysisId
-                  );
-                  if (sessionsForCollection.length > 0) {
-                    return {
-                      ...collection,
-                      testSessions: sessionsForCollection.map((s: any) => ({
-                        id: s.id,
-                        name: s.name,
-                        color: s.color,
-                        testCases: s.test_cases,
-                        testReport: s.test_report,
-                        createdAt: s.created_at,
-                        completedAt: s.completed_at,
-                        metadata: {
-                          totalTests: s.total_tests,
-                          passedTests: s.passed_tests,
-                          failedTests: s.failed_tests,
-                          warningTests: s.warning_tests,
-                          successRate: s.success_rate,
-                          totalFixes: s.total_fixes,
-                          pendingFixes: s.pending_fixes,
-                          acceptedFixes: s.accepted_fixes,
-                          rejectedFixes: s.rejected_fixes,
-                        },
-                        fixes: s.fixes,
-                        fixesLocked: s.fixes_locked,
-                      })),
-                    };
+            .then((sessions: any) => {
+              console.log('[Store] API response:', sessions);
+              // Backend returns array directly, not wrapped in object
+              if (Array.isArray(sessions) && sessions.length > 0) {
+                console.log(`[Store] ✅ Loaded ${sessions.length} test sessions from database`, sessions);
+                
+                // Convert each session to a TestCollection with a single session
+                const newCollections = sessions.map((s: any) => ({
+                  id: s.id,
+                  name: s.name,
+                  description: `Test session from ${new Date(s.createdAt || s.created_at).toLocaleDateString()}`,
+                  createdAt: s.createdAt || s.created_at,
+                  updatedAt: s.createdAt || s.created_at,
+                  testCases: s.testCases || [],  // Backend returns camelCase
+                  testReport: s.testReport || s.test_report,
+                  status: 'completed' as const,
+                  sessionId: s.id,
+                  metadata: {
+                    totalTests: s.metadata?.totalTests || s.total_tests || 0,
+                    passedTests: s.metadata?.passedTests || s.passed_tests || 0,
+                    failedTests: s.metadata?.failedTests || s.failed_tests || 0,
+                    successRate: s.metadata?.successRate || s.success_rate || 0,
+                  },
+                  testSessions: [{
+                    id: s.id,
+                    name: s.name,
+                    color: s.color,
+                    testCases: s.testCases || [],  // Backend returns camelCase
+                    testReport: s.testReport || s.test_report,
+                    createdAt: s.createdAt || s.created_at,
+                    completedAt: s.completedAt || s.completed_at,
+                    metadata: {
+                      totalTests: s.metadata?.totalTests || s.total_tests || 0,
+                      passedTests: s.metadata?.passedTests || s.passed_tests || 0,
+                      failedTests: s.metadata?.failedTests || s.failed_tests || 0,
+                      warningTests: s.metadata?.warningTests || s.warning_tests || 0,
+                      successRate: s.metadata?.successRate || s.success_rate || 0,
+                      totalFixes: s.metadata?.totalFixes || s.total_fixes || 0,
+                      pendingFixes: s.metadata?.pendingFixes || s.pending_fixes || 0,
+                      acceptedFixes: s.metadata?.acceptedFixes || s.accepted_fixes || 0,
+                      rejectedFixes: s.metadata?.rejectedFixes || s.rejected_fixes || 0,
+                    },
+                    fixes: s.fixes || [],
+                    fixesLocked: s.fixesLocked || s.fixes_locked || false,
+                  }],
+                  activeSessionIds: [s.id],
+                }));
+                
+                console.log('[Store] Mapped collections:', newCollections);
+                console.log('[Store] First collection testReport:', newCollections[0]?.testReport);
+                console.log('[Store] First session testReport:', newCollections[0]?.testSessions?.[0]?.testReport);
+                
+                // Replace existing collections with database ones
+                set({ testCollections: newCollections });
+                
+                // Set the first collection as active and make its first session visible
+                if (newCollections.length > 0) {
+                  const firstCollection = newCollections[0];
+                  const firstSessionId = firstCollection.testSessions?.[0]?.id;
+                  
+                  if (!get().activeCollectionId) {
+                    set({ 
+                      activeCollectionId: firstCollection.id,
+                      visibleSessionIds: firstSessionId ? [firstSessionId] : []
+                    });
+                    console.log('[Store] Set active collection:', firstCollection.id);
+                    console.log('[Store] Set visible session:', firstSessionId);
                   }
-                  return collection;
-                });
-                set({ testCollections: updatedCollections });
+                }
+                
+                console.log('[Store] Updated testCollections:', get().testCollections);
+                console.log('[Store] visibleSessionIds:', get().visibleSessionIds);
+              } else {
+                console.log('[Store] No test sessions found or invalid response');
               }
             })
             .catch((error: any) => {
-              console.error('Error loading test sessions from database:', error);
+              console.error('[Store] ❌ Error loading test sessions from database:', error);
             });
+        } else {
+          console.log('[Store] No analysis ID found, skipping test session load');
         }
       } catch (error) {
         console.error('Error loading from localStorage:', error);
@@ -540,7 +588,7 @@ export const useStore = create<AppState>((set) => ({
   })),
   
   hasPendingFixes: () => {
-    const { testCollections } = useStore.getState();
+    const { testCollections } = get();
     return testCollections.some((c: TestCollection) => 
       c.testSessions?.some((s: any) => 
         s.metadata.pendingFixes > 0
@@ -549,7 +597,7 @@ export const useStore = create<AppState>((set) => ({
   },
   
   canExportReport: () => {
-    const { testCollections } = useStore.getState();
+    const { testCollections } = get();
     // Can only export if no pending fixes exist
     return !testCollections.some((c: TestCollection) => 
       c.testSessions?.some((s: any) => s.metadata.pendingFixes > 0)
@@ -587,7 +635,7 @@ export const useStore = create<AppState>((set) => ({
   }),
   
   getVisibleSessions: () => {
-    const state = useStore.getState();
+    const state = get();
     return state.visibleSessionIds;
   },
 }));

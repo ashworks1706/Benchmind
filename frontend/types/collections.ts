@@ -2,11 +2,13 @@
  * Test Collection Types
  */
 
+import { TestCase } from './index';
+
 export interface TestSession {
   id: string;
   name: string;
   color: string; // Unique color for visualization
-  testCases: string[]; // Array of test case IDs
+  testCases: TestCase[]; // Array of FULL test case objects (not just IDs)
   testReport: any | null;
   createdAt: string;
   completedAt: string | null;
@@ -31,7 +33,7 @@ export interface TestCollection {
   description: string;
   createdAt: string;
   updatedAt: string;
-  testCases: string[]; // Array of test case IDs
+  testCases: TestCase[]; // Array of FULL test case objects (not just IDs)
   testReport: any | null;
   status: 'draft' | 'running' | 'completed' | 'failed';
   sessionId: string | null;

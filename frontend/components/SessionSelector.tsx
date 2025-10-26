@@ -17,12 +17,25 @@ export const SESSION_COLORS = [
 ];
 
 export function SessionSelector() {
-  const { testCollections, activeCollectionId, visibleSessionIds, toggleSessionVisibility } = useStore();
+  const { 
+    testCollections, 
+    activeCollectionId, 
+    visibleSessionIds, 
+    toggleSessionVisibility
+  } = useStore();
+
+  console.log('[SessionSelector] Render - testCollections:', testCollections);
+  console.log('[SessionSelector] activeCollectionId:', activeCollectionId);
 
   const activeCollection = testCollections.find(c => c.id === activeCollectionId);
   const sessions = activeCollection?.testSessions || [];
 
+  console.log('[SessionSelector] Active collection:', activeCollection);
+  console.log('[SessionSelector] Sessions count:', sessions.length);
+  console.log('[SessionSelector] Sessions:', sessions);
+
   if (sessions.length === 0) {
+    console.log('[SessionSelector] No sessions found - hiding component');
     return null;
   }
 
@@ -94,7 +107,7 @@ export function SessionSelector() {
 
               {/* Pending Fixes Badge */}
               {session.metadata.pendingFixes > 0 && (
-                <div className="flex-shrink-0 px-1.5 py-0.5 bg-yellow-500/20 border border-yellow-500 rounded text-xs font-semibold text-yellow-700">
+                <div className="shrink-0 px-1.5 py-0.5 bg-yellow-500/20 border border-yellow-500 rounded text-xs font-semibold text-yellow-700">
                   {session.metadata.pendingFixes} pending
                 </div>
               )}
@@ -111,7 +124,7 @@ export function SessionSelector() {
       </div>
 
       <div className="mt-2 pt-2 border-t border-border text-xs text-muted-foreground">
-        💡 <strong>Tip:</strong> Click sessions to toggle visibility. Multiple sessions can be displayed simultaneously with different colors.
+        💡 <strong>Tip:</strong> Click sessions to toggle test visibility on canvas. View detailed reports in the Test Suites panel →
       </div>
     </div>
   );

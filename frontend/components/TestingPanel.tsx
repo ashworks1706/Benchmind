@@ -191,7 +191,7 @@ import {
             id: testingSessionId,
             name: reportData.report.collection_name || `Test Session ${new Date().toLocaleDateString()}`,
             color: SESSION_COLORS[sessionColor],
-            testCases: data.test_cases?.map((tc: any) => tc.id) || [],
+            testCases: data.test_cases || [], // Store FULL test case objects
             testReport: reportData.report,
             createdAt: new Date().toISOString(),
             completedAt: new Date().toISOString(),
@@ -218,7 +218,7 @@ import {
               description: reportData.report.collection_description || 'Test execution results',
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
-              testCases: data.test_cases.map((tc: any) => tc.id), // Store test case IDs
+              testCases: data.test_cases || [], // Store FULL test case objects
               testReport: reportData.report,
               status: 'completed' as const,
               sessionId: testingSessionId,
@@ -232,6 +232,55 @@ import {
               activeSessionIds: [testingSessionId],
             };
             addTestCollection(collection);
+            
+            // Save test session to database with FULL test cases
+            if (currentAnalysisId) {
+              apiService.createTestSession({
+                id: testingSessionId,
+                analysis_id: currentAnalysisId,
+                project_id: currentAnalysisId,
+                name: testSession.name,
+                color: testSession.color,
+                test_cases: data.test_cases || [], // Save FULL test case objects
+                test_report: testSession.testReport,
+                fixes: testSession.fixes,
+                total_tests: testSession.metadata.totalTests,
+                passed_tests: testSession.metadata.passedTests,
+                failed_tests: testSession.metadata.failedTests,
+                warning_tests: testSession.metadata.warningTests,
+                success_rate: testSession.metadata.successRate,
+                total_fixes: testSession.metadata.totalFixes,
+                pending_fixes: testSession.metadata.pendingFixes,
+                accepted_fixes: testSession.metadata.acceptedFixes,
+                rejected_fixes: testSession.metadata.rejectedFixes,
+                fixes_locked: testSession.fixesLocked,
+              }).catch((error) => {
+                console.error('Error saving test session to database:', error);
+              });
+            } else {
+              apiService.createTestSession({
+                id: testingSessionId,
+                analysis_id: null,
+                project_id: null,
+                name: testSession.name,
+                color: testSession.color,
+                test_cases: data.test_cases || [], // Save FULL test case objects
+                test_report: testSession.testReport,
+                fixes: testSession.fixes,
+                total_tests: testSession.metadata.totalTests,
+                passed_tests: testSession.metadata.passedTests,
+                failed_tests: testSession.metadata.failedTests,
+                warning_tests: testSession.metadata.warningTests,
+                success_rate: testSession.metadata.successRate,
+                total_fixes: testSession.metadata.totalFixes,
+                pending_fixes: testSession.metadata.pendingFixes,
+                accepted_fixes: testSession.metadata.acceptedFixes,
+                rejected_fixes: testSession.metadata.rejectedFixes,
+                fixes_locked: testSession.fixesLocked,
+              }).catch((error) => {
+                console.error('Error saving test session to database:', error);
+              });
+            }
             
             // Save test session to database
             if (currentAnalysisId) {

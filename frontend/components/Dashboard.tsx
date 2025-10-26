@@ -10,6 +10,7 @@ import TestingPanel from './TestingPanel';
 import TestReportPanel from './TestReportPanel';
 import ChangeQueuePanel from './ChangeQueuePanel';
 import { TestSuitesPanel } from './TestSuitesPanel';
+import { ResearchReportModal } from './ResearchReportModal';
 import { Loader2, Database, Trash2, Activity, Beaker, FileText } from 'lucide-react';
 
 export function Dashboard() {
@@ -29,15 +30,25 @@ export function Dashboard() {
     loadFromLocalStorage,
     reset,
     setPanelView,
+    showProgressReport,
+    currentProgressSessionId,
+    setShowProgressReport,
+    testCollections,
+    acceptFix,
+    rejectFix,
   } = useStore();
 
   // Load from localStorage on mount
   useEffect(() => {
+    console.log('[Dashboard] useEffect triggered - calling loadFromLocalStorage');
     loadFromLocalStorage();
+    console.log('[Dashboard] loadFromLocalStorage called');
     
     // Check if there's an ongoing analysis
     const savedAnalysisId = localStorage.getItem('currentAnalysisId');
     const savedGithubUrl = localStorage.getItem('currentGithubUrl');
+    
+    console.log('[Dashboard] Checking for saved analysis:', { savedAnalysisId, savedGithubUrl, hasAgentData: !!agentData });
     
     if (savedAnalysisId && savedGithubUrl && !agentData) {
       // Resume polling for the saved analysis
@@ -417,6 +428,43 @@ export function Dashboard() {
       
       {/* Change Queue Panel - Bottom Left */}
       <ChangeQueuePanel />
+      
+      {/* Research Report Modal */}
+      {showProgressReport && currentProgressSessionId && (() => {
+        console.log('[Dashboard] Modal check - showProgressReport:', showProgressReport);
+        console.log('[Dashboard] Modal check - currentProgressSessionId:', currentProgressSessionId);
+        console.log('[Dashboard] Modal check - testCollections:', testCollections);
+        
+        // Find the session by ID
+        const session = testCollections
+          .flatMap(c => c.testSessions || [])
+          .find(s => s.id === currentProgressSessionId);
+        
+        console.log('[Dashboard] Found session:', session);
+        console.log('[Dashboard] Session has testReport:', !!session?.testReport);
+        console.log('[Dashboard] Session has testCases:', session?.testCases?.length);
+        
+        if (!session) {
+          console.log('[Dashboard] No session found, returning null');
+          return null;
+        }
+        
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-100 p-4">
+            <div className="bg-background rounded-lg shadow-2xl w-full max-w-7xl max-h-[95vh] overflow-hidden">
+              <ResearchReportModal
+                testReport={session.testReport}
+                testCases={session.testCases || []}
+                fixes={session.fixes || []}
+                onClose={() => setShowProgressReport(false)}
+                onAcceptFix={(fixId) => acceptFix(fixId, currentProgressSessionId)}
+                onRejectFix={(fixId) => rejectFix(fixId, currentProgressSessionId)}
+                canExport={true}
+              />
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

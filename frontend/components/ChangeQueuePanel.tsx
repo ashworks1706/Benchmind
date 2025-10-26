@@ -13,8 +13,6 @@ export default function ChangeQueuePanel() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
-  if (queuedChanges.length === 0) return null;
-
   const handlePushChanges = async () => {
     if (!agentData) return;
     
@@ -128,9 +126,13 @@ export default function ChangeQueuePanel() {
           onClick={() => setIsExpanded(true)}
           className="shadow-lg hover:shadow-xl transition-all"
           variant="default"
+          disabled={queuedChanges.length === 0}
         >
           <GitCommit className="w-4 h-4 mr-2" />
-          {queuedChanges.length} Queued Change{queuedChanges.length !== 1 ? 's' : ''}
+          {queuedChanges.length === 0 
+            ? 'No Changes' 
+            : `${queuedChanges.length} Queued Change${queuedChanges.length !== 1 ? 's' : ''}`
+          }
         </Button>
       ) : (
         // Expanded view - full panel
@@ -156,7 +158,12 @@ export default function ChangeQueuePanel() {
           {/* Change List */}
           <ScrollArea className="flex-1 max-h-64">
             <div className="p-2 space-y-2">
-              {queuedChanges.map((change) => (
+              {queuedChanges.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground text-sm">
+                  No changes queued yet
+                </div>
+              ) : (
+                queuedChanges.map((change) => (
                 <div
                   key={change.id}
                   className="p-2 rounded-lg border border-border bg-card hover:bg-accent/50 transition-colors"
@@ -187,7 +194,8 @@ export default function ChangeQueuePanel() {
                     </Button>
                   </div>
                 </div>
-              ))}
+              ))
+              )}
             </div>
           </ScrollArea>
 
