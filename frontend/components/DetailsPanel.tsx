@@ -6,7 +6,7 @@ import { Agent, Tool, Relationship, TestCase } from '@/types';
 import { X, Save, HelpCircle } from 'lucide-react';
 import { useState } from 'react';
 import { apiService } from '@/lib/api';
-import { calculateAgentCost, calculateToolCost, calculateConnectionCost, formatCost, getCostColor } from '@/lib/costCalculator';
+import { calculateAgentCost, calculateToolCost, calculateConnectionCost, formatCost, getCostColor, formatLatency, getLatencyColor, formatReliability, getReliabilityColor } from '@/lib/costCalculator';
 
 // Cost Information Popup Component
 function CostInfoPopup({ type }: { type: 'agent' | 'tool' | 'connection' }) {
@@ -373,6 +373,70 @@ function AgentDetails({ agent }: { agent: Agent }) {
         </div>
       </div>
 
+      {/* Performance Metrics Section */}
+      <div className="p-4 rounded-lg border border-blue-500/30 bg-blue-500/5">
+        <h5 className="font-serif font-semibold text-sm text-blue-700 dark:text-blue-300 mb-3">
+          Performance Metrics
+        </h5>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="p-2 bg-background/50 rounded">
+            <span className="text-xs text-muted-foreground block mb-1">Avg Latency:</span>
+            <span className={`text-base font-serif font-bold ${getLatencyColor(cost.latency_ms || 0)}`}>
+              {formatLatency(cost.latency_ms || 0)}
+            </span>
+          </div>
+          <div className="p-2 bg-background/50 rounded">
+            <span className="text-xs text-muted-foreground block mb-1">Reliability:</span>
+            <span className={`text-base font-serif font-bold ${getReliabilityColor(cost.reliability || 1)}`}>
+              {formatReliability(cost.reliability || 1)}
+            </span>
+          </div>
+          {agent.metrics?.reasoning_score !== undefined && (
+            <div className="p-2 bg-background/50 rounded">
+              <span className="text-xs text-muted-foreground block mb-1">Reasoning Score:</span>
+              <span className="text-sm font-mono font-semibold">{agent.metrics.reasoning_score}/100</span>
+            </div>
+          )}
+          {agent.metrics?.accuracy !== undefined && (
+            <div className="p-2 bg-background/50 rounded">
+              <span className="text-xs text-muted-foreground block mb-1">Accuracy:</span>
+              <span className="text-sm font-mono font-semibold">{formatReliability(agent.metrics.accuracy)}</span>
+            </div>
+          )}
+          {agent.metrics?.token_efficiency !== undefined && (
+            <div className="p-2 bg-background/50 rounded">
+              <span className="text-xs text-muted-foreground block mb-1">Token Efficiency:</span>
+              <span className="text-sm font-mono">{agent.metrics.token_efficiency} tokens/task</span>
+            </div>
+          )}
+          {agent.metrics?.context_retention !== undefined && (
+            <div className="p-2 bg-background/50 rounded">
+              <span className="text-xs text-muted-foreground block mb-1">Context Retention:</span>
+              <span className="text-sm font-mono font-semibold">{formatReliability(agent.metrics.context_retention)}</span>
+            </div>
+          )}
+          {agent.metrics?.creativity !== undefined && (
+            <div className="p-2 bg-background/50 rounded">
+              <span className="text-xs text-muted-foreground block mb-1">Creativity:</span>
+              <span className="text-sm font-mono font-semibold">{formatReliability(agent.metrics.creativity)}</span>
+            </div>
+          )}
+          {agent.metrics?.impact && (
+            <div className="p-2 bg-background/50 rounded">
+              <span className="text-xs text-muted-foreground block mb-1">Business Impact:</span>
+              <span className={`text-xs font-mono px-2 py-0.5 rounded uppercase font-bold ${
+                agent.metrics.impact === 'critical' ? 'bg-red-500/20 text-red-700 dark:text-red-300' :
+                agent.metrics.impact === 'high' ? 'bg-orange-500/20 text-orange-700 dark:text-orange-300' :
+                agent.metrics.impact === 'medium' ? 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300' :
+                'bg-green-500/20 text-green-700 dark:text-green-300'
+              }`}>
+                {agent.metrics.impact}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Configuration Section */}
       <div className="space-y-4">
         <DetailSection label="Objective" value={agent.objective} />
@@ -495,7 +559,69 @@ function ToolDetails({ tool }: { tool: Tool }) {
           </div>
         </div>
         <div className="text-xs text-muted-foreground mt-3 p-2 bg-background/50 rounded leading-relaxed">
-          Note: Tool costs are minimal (execution overhead only). Tools typically don't make direct LLM calls.
+          Note: Tool costs are minimal (execution overhead only). Tools typically don&apos;t make direct LLM calls.
+        </div>
+      </div>
+
+      {/* Performance Metrics Section */}
+      <div className="p-4 rounded-lg border border-blue-500/30 bg-blue-500/5">
+        <h5 className="font-serif font-semibold text-sm text-blue-700 dark:text-blue-300 mb-3">
+          Performance Metrics
+        </h5>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="p-2 bg-background/50 rounded">
+            <span className="text-xs text-muted-foreground block mb-1">Avg Latency:</span>
+            <span className={`text-base font-serif font-bold ${getLatencyColor(cost.latency_ms || 0)}`}>
+              {formatLatency(cost.latency_ms || 0)}
+            </span>
+          </div>
+          <div className="p-2 bg-background/50 rounded">
+            <span className="text-xs text-muted-foreground block mb-1">Reliability:</span>
+            <span className={`text-base font-serif font-bold ${getReliabilityColor(cost.reliability || 1)}`}>
+              {formatReliability(cost.reliability || 1)}
+            </span>
+          </div>
+          {tool.metrics?.error_rate !== undefined && (
+            <div className="p-2 bg-background/50 rounded">
+              <span className="text-xs text-muted-foreground block mb-1">Error Rate:</span>
+              <span className="text-sm font-mono font-semibold text-red-600 dark:text-red-400">
+                {formatReliability(tool.metrics.error_rate)}
+              </span>
+            </div>
+          )}
+          {tool.metrics?.complexity && (
+            <div className="p-2 bg-background/50 rounded">
+              <span className="text-xs text-muted-foreground block mb-1">Complexity:</span>
+              <span className={`text-xs font-mono px-2 py-0.5 rounded uppercase font-bold ${
+                tool.metrics.complexity === 'high' ? 'bg-red-500/20 text-red-700 dark:text-red-300' :
+                tool.metrics.complexity === 'medium' ? 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300' :
+                'bg-green-500/20 text-green-700 dark:text-green-300'
+              }`}>
+                {tool.metrics.complexity}
+              </span>
+            </div>
+          )}
+          {tool.metrics?.cache_hit_rate !== undefined && (
+            <div className="p-2 bg-background/50 rounded">
+              <span className="text-xs text-muted-foreground block mb-1">Cache Hit Rate:</span>
+              <span className="text-sm font-mono font-semibold text-green-600 dark:text-green-400">
+                {formatReliability(tool.metrics.cache_hit_rate)}
+              </span>
+            </div>
+          )}
+          {tool.metrics?.impact && (
+            <div className="p-2 bg-background/50 rounded">
+              <span className="text-xs text-muted-foreground block mb-1">Business Impact:</span>
+              <span className={`text-xs font-mono px-2 py-0.5 rounded uppercase font-bold ${
+                tool.metrics.impact === 'critical' ? 'bg-red-500/20 text-red-700 dark:text-red-300' :
+                tool.metrics.impact === 'high' ? 'bg-orange-500/20 text-orange-700 dark:text-orange-300' :
+                tool.metrics.impact === 'medium' ? 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300' :
+                'bg-green-500/20 text-green-700 dark:text-green-300'
+              }`}>
+                {tool.metrics.impact}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -605,6 +731,74 @@ function RelationshipDetails({ relationship }: { relationship: Relationship }) {
             <span className="text-muted-foreground">Data Tokens:</span>
             <span className="font-semibold">{cost.inputTokens}</span>
           </div>
+        </div>
+      </div>
+
+      {/* Performance Metrics */}
+      <div className="p-3 rounded-lg border-2 border-purple-500/30 bg-purple-500/5">
+        <h5 className="font-semibold text-sm text-purple-700 dark:text-purple-300 mb-2">
+          ⚡ Performance Metrics
+        </h5>
+        <div className="space-y-2 text-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Connection Latency:</span>
+            <span className={`font-bold ${getLatencyColor(cost.latency_ms || 0)}`}>
+              {formatLatency(cost.latency_ms || 0)}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Reliability:</span>
+            <span className={`font-bold ${getReliabilityColor(cost.reliability || 1)}`}>
+              {formatReliability(cost.reliability || 1)}
+            </span>
+          </div>
+          {relationship.metrics?.bandwidth !== undefined && (
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Bandwidth:</span>
+              <span className="font-semibold">{relationship.metrics.bandwidth} KB/s</span>
+            </div>
+          )}
+          {relationship.metrics?.data_volume !== undefined && (
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Avg Data Size:</span>
+              <span className="font-semibold">{relationship.metrics.data_volume} KB/call</span>
+            </div>
+          )}
+          {relationship.metrics?.frequency !== undefined && (
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Call Frequency:</span>
+              <span className="font-semibold">{relationship.metrics.frequency} calls/min</span>
+            </div>
+          )}
+          {relationship.metrics?.error_rate !== undefined && (
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Error Rate:</span>
+              <span className="font-semibold text-red-600 dark:text-red-400">
+                {formatReliability(relationship.metrics.error_rate)}
+              </span>
+            </div>
+          )}
+          {relationship.metrics?.timeout_rate !== undefined && (
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Timeout Rate:</span>
+              <span className="font-semibold text-orange-600 dark:text-orange-400">
+                {formatReliability(relationship.metrics.timeout_rate)}
+              </span>
+            </div>
+          )}
+          {relationship.metrics?.impact && (
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Business Impact:</span>
+              <span className={`text-xs font-mono px-2 py-0.5 rounded uppercase font-bold ${
+                relationship.metrics.impact === 'critical' ? 'bg-red-500/20 text-red-700 dark:text-red-300' :
+                relationship.metrics.impact === 'high' ? 'bg-orange-500/20 text-orange-700 dark:text-orange-300' :
+                relationship.metrics.impact === 'medium' ? 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300' :
+                'bg-green-500/20 text-green-700 dark:text-green-300'
+              }`}>
+                {relationship.metrics.impact}
+              </span>
+            </div>
+          )}
         </div>
       </div>
       

@@ -15,6 +15,17 @@ export interface Agent {
   hyperparameters: Record<string, any>;
   objective: string;
   code_snippet: string;
+  // Enhanced metrics for data analysis
+  metrics?: {
+    reasoning_score?: number;     // Reasoning capability (0-100)
+    accuracy?: number;            // Response accuracy (0-1)
+    latency_ms?: number;          // Average response latency in milliseconds
+    token_efficiency?: number;    // Tokens used per task (lower is better)
+    reliability?: number;         // Success rate (0-1)
+    context_retention?: number;   // Ability to maintain context (0-1)
+    creativity?: number;          // Response diversity (0-1)
+    impact?: 'low' | 'medium' | 'high' | 'critical'; // Business impact
+  };
 }
 
 export interface Tool {
@@ -30,6 +41,15 @@ export interface Tool {
   return_type: string;
   code: string;
   summary: string;
+  // Enhanced metrics for data analysis
+  metrics?: {
+    latency_ms?: number;          // Average execution latency in milliseconds
+    reliability?: number;         // Success rate (0-1)
+    complexity?: 'low' | 'medium' | 'high'; // Code complexity
+    error_rate?: number;          // Error rate (0-1)
+    cache_hit_rate?: number;      // Cache effectiveness (0-1)
+    impact?: 'low' | 'medium' | 'high' | 'critical'; // Business impact
+  };
 }
 
 export interface Relationship {
@@ -39,6 +59,17 @@ export interface Relationship {
   type: 'calls' | 'collaborates' | 'sequential' | 'parallel';
   description: string;
   data_flow: string;
+  // Enhanced metrics for data analysis
+  metrics?: {
+    latency_ms?: number;          // Connection latency in milliseconds
+    bandwidth?: number;           // Data transfer rate (KB/s)
+    reliability?: number;         // Connection success rate (0-1)
+    data_volume?: number;         // Average data size per call (KB)
+    frequency?: number;           // Calls per minute
+    error_rate?: number;          // Connection error rate (0-1)
+    timeout_rate?: number;        // Timeout occurrence rate (0-1)
+    impact?: 'low' | 'medium' | 'high' | 'critical'; // Business impact
+  };
 }
 
 export interface AgentData {

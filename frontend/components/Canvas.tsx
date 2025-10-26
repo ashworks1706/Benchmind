@@ -4,7 +4,7 @@ import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { useStore } from '@/lib/store';
 import { Agent, Tool, TestCase, Relationship } from '@/types';
 import { getTestCaseColor } from '@/lib/testColors';
-import { calculateAgentCost, calculateToolCost, calculateConnectionCost, formatCost, getCostColor, CostMultipliers } from '@/lib/costCalculator';
+import { calculateAgentCost, calculateToolCost, calculateConnectionCost, formatCost, getCostColor, formatLatency, getLatencyColor, formatReliability, getReliabilityColor, CostMultipliers } from '@/lib/costCalculator';
 import { SessionSelector } from './SessionSelector';
 import { ResearchReportModal } from './ResearchReportModal';
 import { ObjectiveFocusPanel } from './ObjectiveFocusPanel';
@@ -108,7 +108,7 @@ export function Canvas() {
 
   // Calculate dynamic costs for all nodes, filtering out hidden ones
   const dynamicCosts = useMemo(() => {
-    const costs = new Map<string, { totalCost: number; apiCalls: number }>();
+    const costs = new Map<string, { totalCost: number; apiCalls: number; latency_ms?: number; reliability?: number }>();
     
     // Calculate costs for visible nodes only
     nodes.forEach(node => {
@@ -116,10 +116,20 @@ export function Canvas() {
       
       if (node.type === 'agent') {
         const cost = calculateAgentCost(node.data as Agent, 500, 200, 10, costMultipliers);
-        costs.set(node.id, { totalCost: cost.totalCost, apiCalls: cost.apiCalls });
+        costs.set(node.id, { 
+          totalCost: cost.totalCost, 
+          apiCalls: cost.apiCalls,
+          latency_ms: cost.latency_ms,
+          reliability: cost.reliability 
+        });
       } else if (node.type === 'tool') {
         const cost = calculateToolCost(node.data as Tool, 5, costMultipliers);
-        costs.set(node.id, { totalCost: cost.totalCost, apiCalls: cost.apiCalls });
+        costs.set(node.id, { 
+          totalCost: cost.totalCost, 
+          apiCalls: cost.apiCalls,
+          latency_ms: cost.latency_ms,
+          reliability: cost.reliability 
+        });
       }
     });
     
@@ -131,7 +141,12 @@ export function Canvas() {
       // Only calculate cost if edge has data (relationships), otherwise use default cost with multipliers
       if (edge.data) {
         const cost = calculateConnectionCost(edge.data, 10, costMultipliers);
-        costs.set(edge.id, { totalCost: cost.totalCost, apiCalls: cost.apiCalls });
+        costs.set(edge.id, { 
+          totalCost: cost.totalCost, 
+          apiCalls: cost.apiCalls,
+          latency_ms: cost.latency_ms,
+          reliability: cost.reliability 
+        });
       } else {
         // Default cost for edges without relationship data (e.g., agent-tool connections)
         // Apply multipliers to default cost as well
@@ -141,20 +156,39 @@ export function Canvas() {
         
         const baseCost = 0.00005;
         const baseCallsPerDay = 10;
+        const baseLatency = 25; // 25ms for agent-tool connection
         const adjustedCallsPerDay = baseCallsPerDay * accuracyMultiplier * speedMultiplier;
         const totalCost = baseCost * adjustedCallsPerDay / costOptimizationMultiplier;
+        const latency_ms = Math.round(baseLatency / speedMultiplier);
         
-        costs.set(edge.id, { totalCost, apiCalls: Math.round(adjustedCallsPerDay) });
+        costs.set(edge.id, { 
+          totalCost, 
+          apiCalls: Math.round(adjustedCallsPerDay),
+          latency_ms,
+          reliability: 0.99 
+        });
       }
     });
     
-    // Calculate total canvas cost
+    // Calculate total canvas cost and latency
     let totalCanvasCost = 0;
+    let totalCanvasLatency = 0;
+    let totalReliability = 1.0;
+    let componentCount = 0;
+    
     costs.forEach(cost => {
       totalCanvasCost += cost.totalCost;
+      totalCanvasLatency += cost.latency_ms || 0;
+      totalReliability *= cost.reliability || 1.0;
+      componentCount++;
     });
     
-    return { costs, totalCanvasCost };
+    return { 
+      costs, 
+      totalCanvasCost, 
+      totalCanvasLatency,
+      avgReliability: componentCount > 0 ? totalReliability : 1.0 
+    };
   }, [nodes, edges, hiddenNodeIds, costMultipliers]);
 
   // Auto-fit zoom function
@@ -1451,14 +1485,26 @@ export function Canvas() {
         <div className="bg-background/90 border border-border rounded-lg shadow-lg px-3 py-2 text-sm backdrop-blur">
           Zoom: {Math.round(transform.scale * 100)}%
         </div>
-        <div className="bg-background/90 border border-border rounded-lg shadow-lg px-3 py-2 backdrop-blur">
-          <div className="flex items-center justify-between gap-3">
+        <div className="bg-background/90 border border-border rounded-lg shadow-lg px-3 py-2.5 backdrop-blur">
+          <div className="flex items-center justify-between gap-3 mb-1.5">
             <span className="text-xs font-serif text-muted-foreground">Total Canvas Cost:</span>
             <span className={`text-sm font-serif font-bold ${getCostColor(dynamicCosts.totalCanvasCost)} tracking-wide`}>
               {formatCost(dynamicCosts.totalCanvasCost)}/day
             </span>
           </div>
-          <div className="text-xs text-muted-foreground mt-1 font-mono">
+          <div className="flex items-center justify-between gap-3 mb-1.5">
+            <span className="text-xs font-serif text-muted-foreground">Total Latency:</span>
+            <span className={`text-sm font-serif font-bold ${getLatencyColor(dynamicCosts.totalCanvasLatency)} tracking-wide`}>
+              {formatLatency(dynamicCosts.totalCanvasLatency)}
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs font-serif text-muted-foreground">Avg Reliability:</span>
+            <span className={`text-sm font-serif font-bold ${getReliabilityColor(dynamicCosts.avgReliability)} tracking-wide`}>
+              {formatReliability(dynamicCosts.avgReliability)}
+            </span>
+          </div>
+          <div className="text-xs text-muted-foreground mt-2 pt-1.5 border-t border-border/50 font-mono">
             {nodes.filter(n => !hiddenNodeIds.has(n.id)).length} visible nodes
           </div>
         </div>
