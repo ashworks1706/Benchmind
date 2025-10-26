@@ -27,10 +27,9 @@ class RAGService:
             )
         )
         
-        # Use OpenAI embeddings (or can switch to sentence-transformers for local)
-        self.embedding_fn = embedding_functions.OpenAIEmbeddingFunction(
-            api_key=os.getenv("OPENAI_API_KEY", ""),
-            model_name="text-embedding-3-small"
+        # Use HuggingFace sentence-transformers embeddings (local, no API key needed)
+        self.embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
+            model_name="all-MiniLM-L6-v2"  # Fast and efficient model
         )
         
         # Create collections for different types of knowledge

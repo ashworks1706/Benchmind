@@ -2,7 +2,21 @@
 
 An interactive web application that constructs an AI Agent visual editor from LangChain-based AI agent codebases by scraping GitHub repositories. Test, analyze, and improve your AI agents with comprehensive automated testing and real-time visualization.
 
-## 🚀 Features
+## ✨ New: Docker One-Command Startup + RAG Search!
+
+🐳 **Get everything running in seconds:**
+```bash
+make start
+```
+
+🔍 **Global Search with Ctrl+K:**
+- Search across all agents, tools, reports, and docs
+- HuggingFace embeddings (local, no API keys needed)
+- Navigate directly to specific sections
+
+� **Complete Docker Guide**: See [DOCKER_START.md](DOCKER_START.md)
+
+## �🚀 Features
 
 - **GitHub Repository Analysis**: Automatically scrape and analyze LangChain-based repositories
 - **Interactive Visualization**: Zoomable/pannable canvas showing agents, tools, and relationships
@@ -18,6 +32,8 @@ An interactive web application that constructs an AI Agent visual editor from La
 - **Real-time Code Editing**: Edit agent configurations and tool code with instant reflection
 - **Smart Recommendations**: AI-powered fix suggestions with exact file locations
 - **Live Testing Dashboard**: Watch tests run with real-time highlighting
+- **🔍 RAG Search System**: Global search with Ctrl+K across all your data
+- **🐳 Dockerized**: One-command startup with persistent data
 
 ## 🏗️ Architecture
 
@@ -26,6 +42,7 @@ An interactive web application that constructs an AI Agent visual editor from La
 - **Agent Parser**: Uses Gemini AI to extract agent configurations, tools, and relationships
 - **Test Generator**: Creates and executes comprehensive test cases
 - **Code Editor**: Manages code changes and applies fixes
+- **RAG Service**: ChromaDB + HuggingFace embeddings for search
 
 ### Frontend (Next.js + React)
 - **Landing Page**: Feature-rich presentation with pricing
@@ -33,22 +50,55 @@ An interactive web application that constructs an AI Agent visual editor from La
 - **Canvas**: Interactive visualization using ReactFlow
 - **Status Panel**: Real-time progress and test results
 - **Details Panel**: Editable agent/tool information
+- **Spotlight Search**: Global search with Ctrl+K
 
 ## 📋 Prerequisites
 
+- **Docker & Docker Compose** (for Docker setup - recommended)
+  - OR -
 - Python 3.9+
 - Node.js 18+
 - Gemini API Key
 - GitHub Personal Access Token
 
-## 🛠️ Setup
+## 🛠️ Quick Start
 
-### 🐳 Docker Setup (Recommended)
-
-The easiest way to run the application is using Docker:
+### 🐳 Docker Setup (Recommended - One Command!)
 
 ```bash
-# 1. Setup environment
+# 1. Clone repository
+git clone https://github.com/ashworks1706/calhacks-2025.git
+cd calhacks-2025
+
+# 2. Start everything!
+make start
+
+# That's it! Services are running:
+# - Frontend: http://localhost:3000
+# - Backend: http://localhost:5000
+```
+
+**First run:** The script will create `.env` file. Edit it with your API keys, then run `make start` again.
+
+**Useful commands:**
+```bash
+make logs           # View logs
+make restart        # Restart services
+make down           # Stop services
+make rag-index      # Index documentation
+make help           # Show all commands
+```
+
+📚 **Complete guide**: [DOCKER_START.md](DOCKER_START.md)
+
+---
+
+### 🔧 Manual Setup (Alternative)
+
+<details>
+<summary>Click to expand manual setup instructions</summary>
+
+### Backend Setup
 make setup
 # Edit .env and add your credentials
 

@@ -1,8 +1,11 @@
-.PHONY: help build up down logs restart clean reset backend-shell frontend-shell db-shell db-backup db-restore test
+.PHONY: help build up down logs restart clean reset backend-shell frontend-shell db-shell db-backup db-restore test rag-index rag-stats
 
 # Default target
 help:
 	@echo "🐳 AI Agent Benchmark - Docker Commands"
+	@echo ""
+	@echo "🚀 Quick Start:"
+	@echo "  make start          - Complete startup (setup + build + up)"
 	@echo ""
 	@echo "Setup:"
 	@echo "  make setup          - Initial setup (copy .env, generate secrets)"
@@ -31,6 +34,10 @@ help:
 	@echo "  make db-backup      - Backup database to backup.sql"
 	@echo "  make db-restore     - Restore database from backup.sql"
 	@echo ""
+	@echo "RAG Search:"
+	@echo "  make rag-index      - Index documentation into RAG system"
+	@echo "  make rag-stats      - Show RAG database statistics"
+	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean          - Stop and remove containers"
 	@echo "  make reset          - Remove everything (containers, volumes, images)"
@@ -39,6 +46,15 @@ help:
 	@echo "  make test           - Run all tests"
 	@echo "  make test-backend   - Run backend tests"
 	@echo "  make test-frontend  - Run frontend tests"
+
+# Quick start - complete setup
+start: setup build up
+	@echo ""
+	@echo "✨ All services started!"
+	@echo "   Frontend: http://localhost:3000"
+	@echo "   Backend:  http://localhost:5000"
+	@echo ""
+	@echo "💡 Press Ctrl+K in the app for global search!"
 
 # Initial setup
 setup:
@@ -221,3 +237,13 @@ install-frontend:
 show-env:
 	@echo "🔍 Environment Variables:"
 	@docker-compose exec backend env | grep -E "(FLASK|DATABASE|GITHUB|JWT|ENCRYPTION|GEMINI)" | sort
+
+# RAG search operations
+rag-index:
+	@echo "📚 Indexing documentation into RAG system..."
+	docker-compose exec backend python index_docs.py
+	@echo "✅ Documentation indexed!"
+
+rag-stats:
+	@echo "📊 RAG Database Statistics:"
+	@docker-compose exec backend python -c "from services.rag_service import get_rag_service; import json; print(json.dumps(get_rag_service().get_stats(), indent=2))"

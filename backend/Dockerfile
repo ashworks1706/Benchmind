@@ -1,10 +1,11 @@
 FROM python:3.13-slim
 
-# Install PostgreSQL client and development headers
+# Install PostgreSQL client, development headers, and system dependencies
 RUN apt-get update && apt-get install -y \
     postgresql-client \
     libpq-dev \
     gcc \
+    g++ \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -19,8 +20,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Create directory for cache files
-RUN mkdir -p /app/cache
+# Create directories for cache and data
+RUN mkdir -p /app/cache /app/data/chromadb
 
 # Expose port
 EXPOSE 5000

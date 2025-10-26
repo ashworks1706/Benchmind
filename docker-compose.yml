@@ -51,6 +51,7 @@ services:
     volumes:
       - ./backend:/app
       - backend_cache:/app/cache
+      - chromadb_data:/app/data/chromadb
     ports:
       - "5000:5000"
     depends_on:
@@ -85,6 +86,8 @@ volumes:
   postgres_data:
     driver: local
   backend_cache:
+    driver: local
+  chromadb_data:
     driver: local
 
 networks:

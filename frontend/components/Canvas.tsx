@@ -251,6 +251,56 @@ export function Canvas() {
     setTransform({ x, y, scale });
   }, [nodes]);
 
+  // Zoom to highlighted test elements during test execution
+  const zoomToTestElements = useCallback(() => {
+    if (!canvasRef.current || nodes.length === 0 || !isTestingInProgress) return;
+
+    const canvasRect = canvasRef.current.getBoundingClientRect();
+    const padding = 120; // Extra padding for test focus
+
+    // Get all highlighted nodes (test nodes, agents, tools involved in current test)
+    const highlightedNodes = nodes.filter(node => {
+      if (node.type === 'test') {
+        // Highlight the currently running test
+        return currentRunningTestId && (node.data as TestCase).id === currentRunningTestId;
+      } else {
+        // Highlight agents/tools that are part of the test
+        return highlightedElements.has(node.id) || highlightedElements.has(node.data.id);
+      }
+    });
+
+    // If no highlighted nodes, fall back to auto-fit
+    if (highlightedNodes.length === 0) return;
+
+    // Calculate bounding box of highlighted nodes
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    
+    highlightedNodes.forEach(node => {
+      minX = Math.min(minX, node.x);
+      minY = Math.min(minY, node.y);
+      maxX = Math.max(maxX, node.x + node.width);
+      maxY = Math.max(maxY, node.y + node.height);
+    });
+
+    const contentWidth = maxX - minX;
+    const contentHeight = maxY - minY;
+
+    // Calculate scale to fit highlighted content with padding
+    const scaleX = (canvasRect.width - padding * 2) / contentWidth;
+    const scaleY = (canvasRect.height - padding * 2) / contentHeight;
+    
+    // Use slightly higher zoom for test focus (0.5 to 1.2 range)
+    let scale = Math.min(scaleX, scaleY);
+    scale = Math.max(0.5, Math.min(scale, 1.2)); // Allow slight zoom in for focus
+
+    // Calculate position to center highlighted content
+    const x = (canvasRect.width - contentWidth * scale) / 2 - minX * scale;
+    const y = (canvasRect.height - contentHeight * scale) / 2 - minY * scale;
+
+    // Smooth transition to new position
+    setTransform({ x, y, scale });
+  }, [nodes, isTestingInProgress, currentRunningTestId, highlightedElements]);
+
   // Auto-fit on nodes change or window resize
   useEffect(() => {
     if (nodes.length > 0) {
@@ -259,6 +309,17 @@ export function Canvas() {
       return () => clearTimeout(timer);
     }
   }, [nodes.length, autoFitZoom]);
+
+  // Zoom to test elements when testing is in progress or current test changes
+  useEffect(() => {
+    if (isTestingInProgress && nodes.length > 0) {
+      // Delay to allow highlight updates to complete
+      const timer = setTimeout(() => {
+        zoomToTestElements();
+      }, 300); // Slight delay for smoother transition
+      return () => clearTimeout(timer);
+    }
+  }, [isTestingInProgress, currentRunningTestId, highlightedElements.size, nodes.length, zoomToTestElements]);
 
   // Handle window resize
   useEffect(() => {
@@ -399,6 +460,97 @@ export function Canvas() {
     
     return connected;
   }, [hoveredNodeId, edges]);
+
+  // Calculate impact region and metrics for hovered node
+  const hoverImpactData = useMemo(() => {
+    if (!hoveredNodeId) return null;
+
+    const hoveredNode = nodes.find(n => n.id === hoveredNodeId);
+    if (!hoveredNode) return null;
+
+    // Get all connected nodes
+    const connectedNodes = nodes.filter(n => connectedNodeIds.has(n.id) && n.id !== hoveredNodeId);
+    if (connectedNodes.length === 0) return null;
+
+    // Get connected edges
+    const connectedEdges = edges.filter(e => 
+      e.from.id === hoveredNodeId || e.to.id === hoveredNodeId
+    );
+
+    // Calculate bounding box with padding
+    const allNodes = [hoveredNode, ...connectedNodes];
+    const padding = 50;
+    
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    allNodes.forEach(node => {
+      minX = Math.min(minX, node.x - padding);
+      minY = Math.min(minY, node.y - padding);
+      maxX = Math.max(maxX, node.x + node.width + padding);
+      maxY = Math.max(maxY, node.y + node.height + padding);
+    });
+
+    // Calculate convex hull points for a rounded polygon
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    const width = maxX - minX;
+    const height = maxY - minY;
+    
+    // Create rounded rectangle path
+    const radius = 30;
+    const points = [
+      { x: minX + radius, y: minY },
+      { x: maxX - radius, y: minY },
+      { x: maxX, y: minY + radius },
+      { x: maxX, y: maxY - radius },
+      { x: maxX - radius, y: maxY },
+      { x: minX + radius, y: maxY },
+      { x: minX, y: maxY - radius },
+      { x: minX, y: minY + radius },
+    ];
+
+    // Calculate impact metrics
+    let totalCost = 0;
+    let totalLatency = 0;
+    let avgSuccessRate = 0;
+    let edgeCount = 0;
+
+    connectedEdges.forEach(edge => {
+      const edgeCost = calculateConnectionCost(
+        edge.from.data,
+        edge.to.data,
+        costMultipliers
+      );
+      if (edgeCost) {
+        totalCost += edgeCost.totalCost;
+        totalLatency += edgeCost.latency.p50;
+        avgSuccessRate += edgeCost.successRate;
+        edgeCount++;
+      }
+    });
+
+    if (edgeCount > 0) {
+      avgSuccessRate /= edgeCount;
+    }
+
+    // Calculate total impact weight (nodes + edges)
+    const impactWeight = connectedNodes.length + edgeCount;
+
+    return {
+      points,
+      centerX,
+      centerY,
+      width,
+      height,
+      metrics: {
+        totalCost,
+        totalLatency,
+        avgSuccessRate,
+        connectedNodes: connectedNodes.length,
+        connectedEdges: edgeCount,
+        impactWeight,
+      }
+    };
+  }, [hoveredNodeId, nodes, edges, connectedNodeIds, costMultipliers]);
 
   // Build graph from agent data with alternating zigzag pattern
   useEffect(() => {
@@ -948,7 +1100,11 @@ export function Canvas() {
         style={{
           transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
           transformOrigin: '0 0',
-          transition: isDragging ? 'none' : 'transform 0.1s ease-out',
+          transition: isDragging 
+            ? 'none' 
+            : isTestingInProgress 
+              ? 'transform 0.6s cubic-bezier(0.4, 0.0, 0.2, 1)' // Smooth zoom during testing
+              : 'transform 0.1s ease-out', // Quick zoom for manual controls
         }}
       >
         {/* Draw edges first (behind nodes) */}
@@ -987,7 +1143,95 @@ export function Canvas() {
             >
               <path d="M0,0 L0,6 L9,3 z" fill="#3b82f6" />
             </marker>
+            
+            {/* Gradient for impact region */}
+            <radialGradient id="impact-gradient">
+              <stop offset="0%" stopColor="rgba(139, 92, 246, 0.15)" />
+              <stop offset="100%" stopColor="rgba(139, 92, 246, 0.02)" />
+            </radialGradient>
           </defs>
+
+          {/* Impact region overlay - render before edges */}
+          {hoverImpactData && (
+            <g className="impact-region" style={{
+              animation: 'fadeIn 0.3s ease-out'
+            }}>
+              {/* Rounded rectangle background */}
+              <rect
+                x={hoverImpactData.points[0].x - 20}
+                y={hoverImpactData.points[0].y - 10}
+                width={hoverImpactData.width + 40}
+                height={hoverImpactData.height + 20}
+                rx="30"
+                ry="30"
+                fill="url(#impact-gradient)"
+                stroke="rgba(139, 92, 246, 0.4)"
+                strokeWidth="2"
+                strokeDasharray="8,4"
+                style={{
+                  filter: 'drop-shadow(0 0 20px rgba(139, 92, 246, 0.3))',
+                }}
+              />
+              
+              {/* Impact metrics display */}
+              <g transform={`translate(${hoverImpactData.centerX}, ${hoverImpactData.points[0].y - 30})`}>
+                {/* Background panel */}
+                <rect
+                  x="-160"
+                  y="-60"
+                  width="320"
+                  height="50"
+                  rx="8"
+                  fill="rgba(0, 0, 0, 0.85)"
+                  stroke="rgba(139, 92, 246, 0.6)"
+                  strokeWidth="1.5"
+                />
+                
+                {/* Title */}
+                <text
+                  x="0"
+                  y="-40"
+                  textAnchor="middle"
+                  fill="rgba(139, 92, 246, 1)"
+                  fontSize="11"
+                  fontWeight="600"
+                >
+                  ⚡ Node Impact Region
+                </text>
+                
+                {/* Metrics row */}
+                <g transform="translate(-140, -22)">
+                  {/* Connected nodes */}
+                  <text fill="#10b981" fontSize="10" fontWeight="500">
+                    🔗 {hoverImpactData.metrics.connectedNodes} nodes
+                  </text>
+                  
+                  {/* Total cost */}
+                  <text x="85" fill="#f59e0b" fontSize="10" fontWeight="500">
+                    💰 ${hoverImpactData.metrics.totalCost.toFixed(3)}/day
+                  </text>
+                  
+                  {/* Average latency */}
+                  <text x="200" fill="#3b82f6" fontSize="10" fontWeight="500">
+                    ⚡ {hoverImpactData.metrics.totalLatency.toFixed(0)}ms
+                  </text>
+                </g>
+                
+                {/* Weight indicator */}
+                <g transform="translate(0, 0)">
+                  <text
+                    x="0"
+                    y="0"
+                    textAnchor="middle"
+                    fill="rgba(255, 255, 255, 0.9)"
+                    fontSize="9"
+                  >
+                    Impact Weight: <tspan fill="#8b5cf6" fontWeight="600">{hoverImpactData.metrics.impactWeight}</tspan>
+                  </text>
+                </g>
+              </g>
+            </g>
+          )}
           
           {edges.map((edge) => {
             // Skip edge if either node is hidden
