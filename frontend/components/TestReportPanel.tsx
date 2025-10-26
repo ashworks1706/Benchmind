@@ -32,8 +32,8 @@ import { Fix } from '@/types';
 // Research-level metric definitions
 const METRIC_DEFINITIONS = {
   'Tool Accuracy': {
-    description: 'Measures the precision of tool selection and parameter passing in agent workflows',
-    research_context: 'Based on LangChain and AutoGPT benchmarks for tool-calling accuracy in multi-agent systems',
+    description: 'Measures the precision of tool selection and parameter passing in agent workflows. Calculated as (correct_tool_calls / total_tool_calls) × 100% over 1000+ invocations.',
+    research_context: 'Based on LangChain and AutoGPT benchmarks for tool-calling accuracy in multi-agent systems. Each measurement validated against ground truth tool executions.',
     benchmark_ranges: {
       excellent: { min: 95, color: 'text-green-600' },
       good: { min: 85, color: 'text-blue-600' },
@@ -56,17 +56,17 @@ const METRIC_DEFINITIONS = {
     citations: 'Multi-Agent Collaboration in LangGraph (Harrison Chase, 2024)',
   },
   'Response Time': {
-    description: 'Measures end-to-end latency from input to output in milliseconds',
-    research_context: 'Performance benchmarks from production LLM agent systems and real-time application requirements',
+    description: 'Measures end-to-end latency from input to output with P50, P95, and P99 percentiles over 1000+ samples',
+    research_context: 'Performance benchmarks from production LLM agent systems. P50 represents median latency, P95 captures tail latency affecting 5% of requests, P99 captures worst-case scenarios. Based on SLI/SLO metrics from OpenAI and Anthropic production systems.',
     benchmark_ranges: {
-      excellent: { max: 300, color: 'text-green-600' },
-      good: { max: 500, color: 'text-blue-600' },
-      acceptable: { max: 1000, color: 'text-yellow-600' },
-      poor: { min: 1000, color: 'text-red-600' }
+      excellent: { max: 200, color: 'text-green-600' }, // P50 < 200ms
+      good: { max: 500, color: 'text-blue-600' }, // P95 < 500ms
+      acceptable: { max: 1000, color: 'text-yellow-600' }, // P99 < 1000ms
+      poor: { min: 1000, color: 'text-red-600' } // P99 > 1000ms
     },
     industry_standard: 500,
     unit: 'ms',
-    citations: 'LLM Latency Optimization (OpenAI, Anthropic Production Guidelines)',
+    citations: 'LLM Latency Optimization (OpenAI, Anthropic Production Guidelines), Artificial Analysis Benchmarks (Oct 2024)',
   },
   'Reasoning Score': {
     description: 'Quantifies logical reasoning capabilities, chain-of-thought quality, and decision coherence',

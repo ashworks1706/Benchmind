@@ -11,7 +11,7 @@ import TestReportPanel from './TestReportPanel';
 import ChangeQueuePanel from './ChangeQueuePanel';
 import { TestSuitesPanel } from './TestSuitesPanel';
 import { ResearchReportModal } from './ResearchReportModal';
-import { Loader2, Database, Trash2, Activity, Beaker, FileText } from 'lucide-react';
+import { Loader2, Database, Trash2, Activity, Beaker, FileText, RefreshCw } from 'lucide-react';
 
 export function Dashboard() {
   const [githubUrl, setGithubUrl] = useState('');
@@ -354,6 +354,117 @@ export function Dashboard() {
                     <span>Cached</span>
                   </div>
                 )}
+                <button
+                  onClick={async () => {
+                    if (!githubUrl) {
+                      addStatusMessage({
+                        type: 'error',
+                        message: 'No GitHub URL available to refetch',
+                      });
+                      return;
+                    }
+                    
+                    try {
+                      setLoading(true, '🔄 Refetching and rescaping repository...');
+                      setAnalysisSteps([]);
+                      
+                      addStatusMessage({
+                        type: 'info',
+                        message: `🔄 Refetching ${githubUrl} and rescaping...`,
+                      });
+
+                      // Clear cache first
+                      await apiService.clearAllCache();
+                      
+                      // Start fresh analysis
+                      const analysisId = await apiService.startAnalysis(githubUrl);
+                      localStorage.setItem('currentAnalysisId', analysisId);
+                      localStorage.setItem('currentGithubUrl', githubUrl);
+
+                      // Poll for results
+                      const pollInterval = setInterval(async () => {
+                        try {
+                          const statusData = await apiService.getAnalysisStatus(analysisId);
+                          
+                          const stepEmojis: { [key: string]: string } = {
+                            'Loading from cache': '💾',
+                            'Fetching repository': '📥',
+                            'Scanning files': '📄',
+                            'Identifying agents': '🤖',
+                            'Extracting tools': '🔧',
+                            'Mapping relationships': '🔗',
+                            'Complete': '✅'
+                          };
+                          
+                          const emoji = stepEmojis[statusData.progress.name] || '⚙️';
+                          
+                          setAnalysisSteps((prev) => {
+                            const existingIndex = prev.findIndex(s => s.step === statusData.progress.step);
+                            if (existingIndex >= 0) {
+                              const newSteps = [...prev];
+                              newSteps[existingIndex] = statusData.progress;
+                              return newSteps;
+                            } else {
+                              return [...prev, statusData.progress];
+                            }
+                          });
+                          
+                          if (statusData.progress.status === 'in_progress') {
+                            addStatusMessage({
+                              type: 'progress',
+                              message: `${emoji} ${statusData.progress.message}`,
+                            });
+                          }
+                          
+                          if (statusData.status === 'success' && statusData.data) {
+                            clearInterval(pollInterval);
+                            localStorage.removeItem('currentAnalysisId');
+                            localStorage.removeItem('currentGithubUrl');
+                            
+                            setAgentData(statusData.data, githubUrl, false); // Not from cache
+                            
+                            addStatusMessage({
+                              type: 'success',
+                              message: `🎉 Refetch complete! Found ${statusData.data.agents.length} agents, ${statusData.data.tools.length} tools, and ${statusData.data.relationships.length} relationships.`,
+                            });
+                            
+                            setLoading(false);
+                          } else if (statusData.status === 'error') {
+                            clearInterval(pollInterval);
+                            localStorage.removeItem('currentAnalysisId');
+                            localStorage.removeItem('currentGithubUrl');
+                            
+                            addStatusMessage({
+                              type: 'error',
+                              message: `❌ Refetch failed: ${statusData.progress.message}`,
+                            });
+                            
+                            setLoading(false);
+                          }
+                        } catch (pollError: any) {
+                          clearInterval(pollInterval);
+                          addStatusMessage({
+                            type: 'error',
+                            message: `❌ Error checking status: ${pollError.message}`,
+                          });
+                          setLoading(false);
+                        }
+                      }, 500);
+                    } catch (error: any) {
+                      addStatusMessage({
+                        type: 'error',
+                        message: `Failed to refetch: ${error.message}`,
+                      });
+                      setLoading(false);
+                    }
+                  }}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 border border-blue-500/30 rounded-md text-blue-600 dark:text-blue-400 text-sm hover:bg-blue-500/20 transition-colors"
+                  title="Refetch and rescrape repository"
+                  disabled={isLoading || !githubUrl}
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  <span>Refetch</span>
+                </button>
                 <button
                   onClick={handleClearCache}
                   className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 border border-red-500/30 rounded-md text-red-600 dark:text-red-400 text-sm hover:bg-red-500/20 transition-colors"

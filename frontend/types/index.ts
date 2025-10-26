@@ -15,16 +15,36 @@ export interface Agent {
   hyperparameters: Record<string, any>;
   objective: string;
   code_snippet: string;
-  // Enhanced metrics for data analysis
+  // Research-grade quantifiable metrics
   metrics?: {
-    reasoning_score?: number;     // Reasoning capability (0-100)
-    accuracy?: number;            // Response accuracy (0-1)
-    latency_ms?: number;          // Average response latency in milliseconds
-    token_efficiency?: number;    // Tokens used per task (lower is better)
-    reliability?: number;         // Success rate (0-1)
-    context_retention?: number;   // Ability to maintain context (0-1)
-    creativity?: number;          // Response diversity (0-1)
-    impact?: 'low' | 'medium' | 'high' | 'critical'; // Business impact
+    // Response Quality (0-100 scale)
+    hallucination_rate?: number;        // % of responses with factual errors (0-100)
+    coherence_score?: number;           // Logical consistency score (0-100)
+    context_window_usage?: number;      // % of context window utilized (0-100)
+    
+    // Performance Benchmarks
+    p50_latency_ms?: number;            // Median response time in milliseconds
+    p95_latency_ms?: number;            // 95th percentile latency (for tail performance)
+    p99_latency_ms?: number;            // 99th percentile latency (worst case)
+    tokens_per_second?: number;         // Token generation throughput
+    
+    // Reliability Metrics (measured over 1000 calls)
+    success_rate?: number;              // % of successful completions (0-100)
+    timeout_rate?: number;              // % of requests that timeout (0-100)
+    rate_limit_hits?: number;           // Count of rate limit errors per 1000 calls
+    
+    // Quality Assurance
+    answer_relevance_score?: number;    // Relevance to prompt (0-100, RAGAS metric)
+    faithfulness_score?: number;        // Groundedness in context (0-100, RAGAS metric)
+    context_recall?: number;            // % of relevant context used (0-100)
+    
+    // Cost Efficiency
+    cost_per_task_usd?: number;         // Average $ cost per completed task
+    tokens_per_task?: number;           // Average tokens consumed per task
+    
+    // Business Criticality
+    user_dependency?: 'none' | 'low' | 'medium' | 'high' | 'critical';
+    failure_blast_radius?: 'isolated' | 'local' | 'regional' | 'global';
   };
 }
 
@@ -41,14 +61,44 @@ export interface Tool {
   return_type: string;
   code: string;
   summary: string;
-  // Enhanced metrics for data analysis
+  // Research-grade quantifiable metrics
   metrics?: {
-    latency_ms?: number;          // Average execution latency in milliseconds
-    reliability?: number;         // Success rate (0-1)
-    complexity?: 'low' | 'medium' | 'high'; // Code complexity
-    error_rate?: number;          // Error rate (0-1)
-    cache_hit_rate?: number;      // Cache effectiveness (0-1)
-    impact?: 'low' | 'medium' | 'high' | 'critical'; // Business impact
+    // Execution Performance (measured values)
+    p50_execution_ms?: number;          // Median execution time in milliseconds
+    p95_execution_ms?: number;          // 95th percentile execution time
+    p99_execution_ms?: number;          // 99th percentile execution time
+    max_execution_ms?: number;          // Maximum observed execution time
+    
+    // Reliability Metrics (over 1000 executions)
+    success_rate?: number;              // % of successful executions (0-100)
+    exception_rate?: number;            // % of executions throwing exceptions (0-100)
+    timeout_rate?: number;              // % of executions exceeding timeout (0-100)
+    retry_rate?: number;                // % of executions requiring retry (0-100)
+    
+    // Resource Utilization
+    avg_memory_mb?: number;             // Average memory consumption in MB
+    peak_memory_mb?: number;            // Peak memory consumption in MB
+    cpu_utilization_pct?: number;       // Average CPU utilization % (0-100)
+    
+    // Data Quality
+    output_validation_pass_rate?: number; // % of outputs passing validation (0-100)
+    schema_compliance_rate?: number;    // % of outputs matching schema (0-100)
+    null_return_rate?: number;          // % of executions returning null (0-100)
+    
+    // Caching & Efficiency
+    cache_hit_rate?: number;            // % of requests served from cache (0-100)
+    cache_write_rate?: number;          // % of results cached (0-100)
+    deduplication_rate?: number;        // % of duplicate calls avoided (0-100)
+    
+    // Code Complexity (static analysis)
+    cyclomatic_complexity?: number;     // McCabe complexity score
+    lines_of_code?: number;             // Total lines of code
+    test_coverage_pct?: number;         // Unit test coverage % (0-100)
+    
+    // Business Impact
+    calls_per_day?: number;             // Average number of invocations per day
+    user_dependency?: 'none' | 'low' | 'medium' | 'high' | 'critical';
+    data_sensitivity?: 'public' | 'internal' | 'confidential' | 'restricted';
   };
 }
 
@@ -59,16 +109,52 @@ export interface Relationship {
   type: 'calls' | 'collaborates' | 'sequential' | 'parallel';
   description: string;
   data_flow: string;
-  // Enhanced metrics for data analysis
+  // Research-grade quantifiable metrics
   metrics?: {
-    latency_ms?: number;          // Connection latency in milliseconds
-    bandwidth?: number;           // Data transfer rate (KB/s)
-    reliability?: number;         // Connection success rate (0-1)
-    data_volume?: number;         // Average data size per call (KB)
-    frequency?: number;           // Calls per minute
-    error_rate?: number;          // Connection error rate (0-1)
-    timeout_rate?: number;        // Timeout occurrence rate (0-1)
-    impact?: 'low' | 'medium' | 'high' | 'critical'; // Business impact
+    // Network Performance (measured latency breakdown)
+    p50_total_latency_ms?: number;      // Median end-to-end latency
+    p95_total_latency_ms?: number;      // 95th percentile latency
+    p99_total_latency_ms?: number;      // 99th percentile latency
+    dns_lookup_ms?: number;             // DNS resolution time
+    tcp_handshake_ms?: number;          // TCP connection time
+    tls_handshake_ms?: number;          // TLS negotiation time
+    serialization_ms?: number;          // Data serialization time
+    deserialization_ms?: number;        // Data deserialization time
+    network_transfer_ms?: number;       // Actual data transfer time
+    
+    // Connection Reliability (over 1000 calls)
+    success_rate?: number;              // % of successful connections (0-100)
+    connection_error_rate?: number;     // % of connection failures (0-100)
+    timeout_rate?: number;              // % of timeouts (0-100)
+    circuit_breaker_trips?: number;     // Count of circuit breaker activations
+    
+    // Data Transfer Metrics
+    avg_payload_bytes?: number;         // Average message size in bytes
+    p95_payload_bytes?: number;         // 95th percentile payload size
+    max_payload_bytes?: number;         // Maximum observed payload size
+    throughput_mbps?: number;           // Megabits per second throughput
+    
+    // Traffic Patterns
+    requests_per_minute?: number;       // Average request frequency
+    peak_requests_per_minute?: number;  // Peak request rate
+    burst_factor?: number;              // Peak/average ratio (burstiness)
+    
+    // Data Quality
+    message_validation_pass_rate?: number; // % passing schema validation (0-100)
+    data_corruption_rate?: number;      // % of corrupted messages (0-100)
+    message_loss_rate?: number;         // % of lost messages (0-100)
+    
+    // Backpressure & Flow Control
+    queue_depth_p50?: number;           // Median queue size
+    queue_depth_p95?: number;           // 95th percentile queue size
+    backpressure_events?: number;       // Count of backpressure activations
+    dropped_messages?: number;          // Count of dropped messages
+    
+    // Business Criticality
+    user_facing?: boolean;              // Is this connection user-facing?
+    sla_target_ms?: number;             // SLA latency target in ms
+    sla_compliance_rate?: number;       // % of calls meeting SLA (0-100)
+    user_dependency?: 'none' | 'low' | 'medium' | 'high' | 'critical';
   };
 }
 

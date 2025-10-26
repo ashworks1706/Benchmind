@@ -4,10 +4,12 @@ import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { useStore } from '@/lib/store';
 import { Agent, Tool, TestCase, Relationship } from '@/types';
 import { getTestCaseColor } from '@/lib/testColors';
-import { calculateAgentCost, calculateToolCost, calculateConnectionCost, formatCost, getCostColor, formatLatency, getLatencyColor, formatReliability, getReliabilityColor, CostMultipliers } from '@/lib/costCalculator';
+import { calculateAgentCost, calculateToolCost, calculateConnectionCost, formatCost, getCostColor, formatLatency, getLatencyColor, formatSuccessRate, getSuccessRateColor, CostMultipliers } from '@/lib/costCalculator';
 import { SessionSelector } from './SessionSelector';
 import { ResearchReportModal } from './ResearchReportModal';
 import { ObjectiveFocusPanel } from './ObjectiveFocusPanel';
+import { DocumentationModal } from './DocumentationModal';
+import { BookOpen } from 'lucide-react';
 
 interface CanvasNode {
   id: string;
@@ -68,6 +70,7 @@ export function Canvas() {
   const [fadingOutNodeIds, setFadingOutNodeIds] = useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [showDocumentation, setShowDocumentation] = useState(false);
 
   // Calculate cost multipliers from objective focus sliders
   const costMultipliers: CostMultipliers = useMemo(() => {
@@ -108,7 +111,14 @@ export function Canvas() {
 
   // Calculate dynamic costs for all nodes, filtering out hidden ones
   const dynamicCosts = useMemo(() => {
-    const costs = new Map<string, { totalCost: number; apiCalls: number; latency_ms?: number; reliability?: number }>();
+    const costs = new Map<string, { 
+      totalCost: number; 
+      apiCalls: number; 
+      p50_latency_ms?: number;
+      p95_latency_ms?: number;
+      p99_latency_ms?: number;
+      success_rate?: number;
+    }>();
     
     // Calculate costs for visible nodes only
     nodes.forEach(node => {
@@ -119,16 +129,20 @@ export function Canvas() {
         costs.set(node.id, { 
           totalCost: cost.totalCost, 
           apiCalls: cost.apiCalls,
-          latency_ms: cost.latency_ms,
-          reliability: cost.reliability 
+          p50_latency_ms: cost.p50_latency_ms,
+          p95_latency_ms: cost.p95_latency_ms,
+          p99_latency_ms: cost.p99_latency_ms,
+          success_rate: cost.success_rate
         });
       } else if (node.type === 'tool') {
         const cost = calculateToolCost(node.data as Tool, 5, costMultipliers);
         costs.set(node.id, { 
           totalCost: cost.totalCost, 
           apiCalls: cost.apiCalls,
-          latency_ms: cost.latency_ms,
-          reliability: cost.reliability 
+          p50_latency_ms: cost.p50_latency_ms,
+          p95_latency_ms: cost.p95_latency_ms,
+          p99_latency_ms: cost.p99_latency_ms,
+          success_rate: cost.success_rate
         });
       }
     });
@@ -144,8 +158,10 @@ export function Canvas() {
         costs.set(edge.id, { 
           totalCost: cost.totalCost, 
           apiCalls: cost.apiCalls,
-          latency_ms: cost.latency_ms,
-          reliability: cost.reliability 
+          p50_latency_ms: cost.p50_latency_ms,
+          p95_latency_ms: cost.p95_latency_ms,
+          p99_latency_ms: cost.p99_latency_ms,
+          success_rate: cost.success_rate
         });
       } else {
         // Default cost for edges without relationship data (e.g., agent-tool connections)
@@ -156,38 +172,48 @@ export function Canvas() {
         
         const baseCost = 0.00005;
         const baseCallsPerDay = 10;
-        const baseLatency = 25; // 25ms for agent-tool connection
+        const baseP50 = 25; // 25ms P50 for agent-tool connection
         const adjustedCallsPerDay = baseCallsPerDay * accuracyMultiplier * speedMultiplier;
         const totalCost = baseCost * adjustedCallsPerDay / costOptimizationMultiplier;
-        const latency_ms = Math.round(baseLatency / speedMultiplier);
+        const p50_latency_ms = Math.round(baseP50 / speedMultiplier);
+        const p95_latency_ms = Math.round((baseP50 * 2) / speedMultiplier);
+        const p99_latency_ms = Math.round((baseP50 * 3) / speedMultiplier);
         
         costs.set(edge.id, { 
           totalCost, 
           apiCalls: Math.round(adjustedCallsPerDay),
-          latency_ms,
-          reliability: 0.99 
+          p50_latency_ms,
+          p95_latency_ms,
+          p99_latency_ms,
+          success_rate: 99.5 // 99.5% for simple agent-tool connections
         });
       }
     });
     
-    // Calculate total canvas cost and latency
+    // Calculate total canvas metrics (P50 latency and success rate)
     let totalCanvasCost = 0;
-    let totalCanvasLatency = 0;
-    let totalReliability = 1.0;
+    let totalP50Latency = 0;
+    let totalP95Latency = 0;
+    let totalP99Latency = 0;
+    let successRateProduct = 1.0;
     let componentCount = 0;
     
     costs.forEach(cost => {
       totalCanvasCost += cost.totalCost;
-      totalCanvasLatency += cost.latency_ms || 0;
-      totalReliability *= cost.reliability || 1.0;
+      totalP50Latency += cost.p50_latency_ms || 0;
+      totalP95Latency += cost.p95_latency_ms || 0;
+      totalP99Latency += cost.p99_latency_ms || 0;
+      successRateProduct *= (cost.success_rate || 100) / 100;
       componentCount++;
     });
     
     return { 
       costs, 
       totalCanvasCost, 
-      totalCanvasLatency,
-      avgReliability: componentCount > 0 ? totalReliability : 1.0 
+      totalP50Latency,
+      totalP95Latency,
+      totalP99Latency,
+      avgSuccessRate: componentCount > 0 ? successRateProduct * 100 : 100
     };
   }, [nodes, edges, hiddenNodeIds, costMultipliers]);
 
@@ -751,11 +777,31 @@ export function Canvas() {
   // Zoom handlers with limits (no zoom in beyond 1.0, limited zoom out to 0.3)
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
+    
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setTransform(prev => ({
-      ...prev,
-      scale: Math.min(Math.max(prev.scale * delta, 0.3), 1.0), // Clamp between 0.3 and 1.0
-    }));
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    
+    // Get mouse position relative to the canvas
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    setTransform(prev => {
+      const newScale = Math.min(Math.max(prev.scale * delta, 0.3), 1.0);
+      
+      // Calculate the position in world coordinates before zoom
+      const worldX = (mouseX - prev.x) / prev.scale;
+      const worldY = (mouseY - prev.y) / prev.scale;
+      
+      // Calculate new offset to keep the mouse position fixed
+      const newX = mouseX - worldX * newScale;
+      const newY = mouseY - worldY * newScale;
+      
+      return {
+        x: newX,
+        y: newY,
+        scale: newScale,
+      };
+    });
   }, []);
 
   // Node click handler
@@ -970,9 +1016,14 @@ export function Canvas() {
             
             const testColor = isRunningTestEdge && currentTestColor ? currentTestColor : null;
             
-            // Use test-specific color for running test edges, otherwise use edge.color or defaults
-            const color = testColor?.primary || (isTestTarget && edge.color ? edge.color : (isAgentTool ? '#10b981' : '#ef4444'));
+            // Use test-specific color for test edges - always use the edge.color if it's a test
+            const color = isTestTarget 
+              ? (testColor?.primary || edge.color || '#8b5cf6') // Use test color or default purple
+              : (isAgentTool ? '#10b981' : '#ef4444');
             const strokeWidth = isRunningTestEdge ? 4 : (isAgentTool ? 3 : isTestTarget ? 2 : 4);
+            
+            // Test edges should be dashed
+            const strokeDasharray = isTestTarget ? '8,4' : undefined;
             
             // Check if this edge should be highlighted
             const isEdgeHighlighted = edge.data && highlightedElements.has(edge.data.id);
@@ -1067,6 +1118,7 @@ export function Canvas() {
                   d={path}
                   stroke={strokeColor}
                   strokeWidth={strokeWidth2 * visualEffects.sizeScale}
+                  strokeDasharray={strokeDasharray}
                   fill="none"
                   markerEnd={`url(#${markerId})`}
                   className={`cursor-pointer pointer-events-none transition-all edge-path ${
@@ -1092,7 +1144,7 @@ export function Canvas() {
                   const dynamicCost = dynamicCosts.costs.get(edge.id);
                   const connectionCost = dynamicCost || (edge.data ? 
                     calculateConnectionCost(edge.data, 10, costMultipliers) : 
-                    { totalCost: 0.005, apiCalls: 100 }); // Default for agent-tool connections
+                    { totalCost: 0.005, apiCalls: 100, p50_latency_ms: 25, p95_latency_ms: 50, p99_latency_ms: 75, success_rate: 99.5 }); // Default for agent-tool connections
                   
                   return (
                     <>
@@ -1106,7 +1158,7 @@ export function Canvas() {
                         className="pointer-events-auto cursor-help select-none"
                       >
                         <title>
-                          {`Connection Cost: ${formatCost(connectionCost.totalCost)}/day | Data transfer overhead | Est. ${connectionCost.apiCalls} calls/day | Adjusted by objective focus`}
+                          {`Connection Cost: ${formatCost(connectionCost.totalCost)}/day | Latency P50: ${connectionCost.p50_latency_ms}ms | P95: ${connectionCost.p95_latency_ms}ms | P99: ${connectionCost.p99_latency_ms}ms | Success Rate: ${formatSuccessRate(connectionCost.success_rate || 0)} | Data transfer overhead | Est. ${connectionCost.apiCalls} calls/day | Adjusted by objective focus`}
                         </title>
                         <tspan
                           style={{
@@ -1120,6 +1172,30 @@ export function Canvas() {
                           {formatCost(connectionCost.totalCost)}/day
                         </tspan>
                       </text>
+                      {/* Latency label below cost */}
+                      {connectionCost.p50_latency_ms !== undefined && (
+                        <text
+                          x={(fromX + toX) / 2}
+                          y={(fromY + toY) / 2 - (isAgentTool ? -30 : 20)}
+                          textAnchor="middle"
+                          fontSize="9"
+                          fontWeight="500"
+                          fontFamily="serif"
+                          className="pointer-events-none select-none"
+                        >
+                          <tspan
+                            style={{
+                              paintOrder: 'stroke',
+                              stroke: '#1f2937',
+                              strokeWidth: '2px',
+                              fill: connectionCost.p50_latency_ms > 500 ? '#fbbf24' : '#a3e635',
+                              fontWeight: '500',
+                            }}
+                          >
+                            {formatLatency(connectionCost.p50_latency_ms, 'p50')}
+                          </tspan>
+                        </text>
+                      )}
                     </>
                   );
                 })()}
@@ -1492,16 +1568,28 @@ export function Canvas() {
               {formatCost(dynamicCosts.totalCanvasCost)}/day
             </span>
           </div>
+          <div className="flex items-center justify-between gap-3 mb-1">
+            <span className="text-xs font-serif text-muted-foreground">Latency P50:</span>
+            <span className={`text-sm font-serif font-bold ${getLatencyColor(dynamicCosts.totalP50Latency)} tracking-wide`}>
+              {formatLatency(dynamicCosts.totalP50Latency, 'p50')}
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-3 mb-1">
+            <span className="text-xs font-serif text-muted-foreground">Latency P95:</span>
+            <span className={`text-sm font-serif font-bold ${getLatencyColor(dynamicCosts.totalP95Latency)} tracking-wide`}>
+              {formatLatency(dynamicCosts.totalP95Latency, 'p95')}
+            </span>
+          </div>
           <div className="flex items-center justify-between gap-3 mb-1.5">
-            <span className="text-xs font-serif text-muted-foreground">Total Latency:</span>
-            <span className={`text-sm font-serif font-bold ${getLatencyColor(dynamicCosts.totalCanvasLatency)} tracking-wide`}>
-              {formatLatency(dynamicCosts.totalCanvasLatency)}
+            <span className="text-xs font-serif text-muted-foreground">Latency P99:</span>
+            <span className={`text-sm font-serif font-bold ${getLatencyColor(dynamicCosts.totalP99Latency)} tracking-wide`}>
+              {formatLatency(dynamicCosts.totalP99Latency, 'p99')}
             </span>
           </div>
           <div className="flex items-center justify-between gap-3">
-            <span className="text-xs font-serif text-muted-foreground">Avg Reliability:</span>
-            <span className={`text-sm font-serif font-bold ${getReliabilityColor(dynamicCosts.avgReliability)} tracking-wide`}>
-              {formatReliability(dynamicCosts.avgReliability)}
+            <span className="text-xs font-serif text-muted-foreground">Avg Success Rate:</span>
+            <span className={`text-sm font-serif font-bold ${getSuccessRateColor(dynamicCosts.avgSuccessRate)} tracking-wide`}>
+              {formatSuccessRate(dynamicCosts.avgSuccessRate)}
             </span>
           </div>
           <div className="text-xs text-muted-foreground mt-2 pt-1.5 border-t border-border/50 font-mono">
@@ -1564,14 +1652,40 @@ export function Canvas() {
         );
       })()}
 
+      {/* Documentation Button - Bottom right, above Objective Focus */}
+      <div className="fixed bottom-20 right-4 z-40">
+        <button
+          onClick={() => setShowDocumentation(true)}
+          className="bg-background border-2 border-primary/30 rounded-full p-3 shadow-lg hover:shadow-xl transition-all hover:border-primary/50 hover:scale-105"
+          title="Documentation & Guide"
+        >
+          <BookOpen className="w-6 h-6 text-primary" />
+        </button>
+      </div>
+
       {/* Objective Focus Control Panel */}
       <ObjectiveFocusPanel />
+
+      {/* Documentation Modal */}
+      {showDocumentation && (
+        <DocumentationModal onClose={() => setShowDocumentation(false)} />
+      )}
     </div>
   );
 }
 
 // Agent Node Component
-function AgentNode({ data, cost }: { data: Agent; cost?: { totalCost: number; apiCalls: number } }) {
+function AgentNode({ data, cost }: { 
+  data: Agent; 
+  cost?: { 
+    totalCost: number; 
+    apiCalls: number;
+    p50_latency_ms?: number;
+    p95_latency_ms?: number;
+    p99_latency_ms?: number;
+    success_rate?: number;
+  } 
+}) {
   const defaultCost = calculateAgentCost(data);
   const displayCost = cost || defaultCost;
   
@@ -1600,11 +1714,21 @@ function AgentNode({ data, cost }: { data: Agent; cost?: { totalCost: number; ap
             </span>
           </div>
         )}
-        <div 
-          className={`text-xs font-serif font-semibold ${getCostColor(displayCost.totalCost)} tracking-wide`}
-          title={`Agent Cost: ${formatCost(displayCost.totalCost)}/day | Est. ${displayCost.apiCalls} API calls/day | Adjusted by objective focus | Click for detailed breakdown`}
-        >
-          {formatCost(displayCost.totalCost)}/day
+        <div className="flex flex-col items-end gap-0.5">
+          <div 
+            className={`text-xs font-serif font-semibold ${getCostColor(displayCost.totalCost)} tracking-wide`}
+            title={`Agent Cost: ${formatCost(displayCost.totalCost)}/day | Est. ${displayCost.apiCalls} API calls/day | Adjusted by objective focus | Click for detailed breakdown`}
+          >
+            {formatCost(displayCost.totalCost)}/day
+          </div>
+          {displayCost.p50_latency_ms !== undefined && (
+            <div 
+              className={`text-[10px] font-serif font-medium ${getLatencyColor(displayCost.p50_latency_ms)} tracking-wide`}
+              title={`P50: ${displayCost.p50_latency_ms}ms | P95: ${displayCost.p95_latency_ms}ms | P99: ${displayCost.p99_latency_ms}ms | Success Rate: ${formatSuccessRate(displayCost.success_rate || 0)}`}
+            >
+              {formatLatency(displayCost.p50_latency_ms, 'p50')}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1612,7 +1736,17 @@ function AgentNode({ data, cost }: { data: Agent; cost?: { totalCost: number; ap
 }
 
 // Tool Node Component
-function ToolNode({ data, cost }: { data: Tool; cost?: { totalCost: number; apiCalls: number } }) {
+function ToolNode({ data, cost }: { 
+  data: Tool; 
+  cost?: { 
+    totalCost: number; 
+    apiCalls: number;
+    p50_latency_ms?: number;
+    p95_latency_ms?: number;
+    p99_latency_ms?: number;
+    success_rate?: number;
+  } 
+}) {
   const defaultCost = calculateToolCost(data);
   const displayCost = cost || defaultCost;
   
@@ -1624,12 +1758,22 @@ function ToolNode({ data, cost }: { data: Tool; cost?: { totalCost: number; apiC
       <span className="text-xs font-semibold text-green-700 dark:text-green-300 text-center line-clamp-2 leading-tight">
         {data.name}
       </span>
-      <span 
-        className={`text-[10px] font-serif font-semibold ${getCostColor(displayCost.totalCost)} tracking-wide`}
-        title={`Tool Cost: ${formatCost(displayCost.totalCost)}/day | Execution overhead | Est. ${displayCost.apiCalls} calls/day | Adjusted by objective focus | Click for detailed breakdown`}
-      >
-        {formatCost(displayCost.totalCost)}/day
-      </span>
+      <div className="flex flex-col items-center gap-0.5">
+        <span 
+          className={`text-[10px] font-serif font-semibold ${getCostColor(displayCost.totalCost)} tracking-wide`}
+          title={`Tool Cost: ${formatCost(displayCost.totalCost)}/day | Execution overhead | Est. ${displayCost.apiCalls} calls/day | Adjusted by objective focus | Click for detailed breakdown`}
+        >
+          {formatCost(displayCost.totalCost)}/day
+        </span>
+        {displayCost.p50_latency_ms !== undefined && (
+          <span 
+            className={`text-[9px] font-serif font-medium ${getLatencyColor(displayCost.p50_latency_ms)} tracking-wide`}
+            title={`P50: ${displayCost.p50_latency_ms}ms | P95: ${displayCost.p95_latency_ms}ms | P99: ${displayCost.p99_latency_ms}ms | Success Rate: ${formatSuccessRate(displayCost.success_rate || 0)}`}
+          >
+            {formatLatency(displayCost.p50_latency_ms, 'p50')}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
