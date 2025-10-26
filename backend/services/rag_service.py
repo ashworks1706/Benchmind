@@ -22,9 +22,13 @@ class FastEmbedEmbeddingFunction:
         embeddings = list(self.model.embed(input))
         return embeddings
     
-    def embed_query(self, text: str) -> List[float]:
+    def embed_query(self, input: str = None, text: str = None, **kwargs) -> List[float]:
         """Embed a single query text for ChromaDB query operations."""
-        embeddings = list(self.model.embed([text]))
+        # Accept both 'input' and 'text' parameters for compatibility
+        query_text = input or text
+        if not query_text:
+            raise ValueError("Either 'input' or 'text' must be provided")
+        embeddings = list(self.model.embed([query_text]))
         return embeddings[0] if embeddings else []
     
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
