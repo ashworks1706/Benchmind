@@ -96,9 +96,13 @@ class CodeEditor:
         response = requests.get(file_url, headers=headers)
         
         if response.status_code != 200:
-            return {'error': f'Failed to fetch file: {response.json().get("message", "Unknown error")}'}
+            error_data = response.json() if response.text else {}
+            return {'error': f'Failed to fetch file: {error_data.get("message", "Unknown error")}'}
         
         file_data = response.json()
+        if not file_data or 'content' not in file_data:
+            return {'error': 'Invalid file data received from GitHub'}
+        
         current_content = requests.utils.unquote(file_data['content'])
         
         # Decode base64 content
@@ -135,15 +139,21 @@ class CodeEditor:
         
         if update_response.status_code in [200, 201]:
             result = update_response.json()
+            if not result or 'commit' not in result:
+                return {
+                    'success': True,
+                    'message': 'Fix applied but response format unexpected'
+                }
             return {
                 'success': True,
-                'commit_sha': result['commit']['sha'],
-                'commit_url': result['commit']['html_url'],
+                'commit_sha': result['commit'].get('sha'),
+                'commit_url': result['commit'].get('html_url'),
                 'message': 'Fix applied to GitHub successfully'
             }
         else:
+            error_data = update_response.json() if update_response.text else {}
             return {
-                'error': f'Failed to update file: {update_response.json().get("message", "Unknown error")}'
+                'error': f'Failed to update file: {error_data.get("message", "Unknown error")}'
             }
     
     def apply_fixes_batch(
@@ -219,17 +229,29 @@ class CodeEditor:
             repo_url = f'https://api.github.com/repos/{owner}/{repo_name}'
             repo_response = requests.get(repo_url, headers=headers)
             if repo_response.status_code != 200:
-                return {'error': f'Failed to get repository: {repo_response.json().get("message")}'}
+                error_data = repo_response.json() if repo_response.text else {}
+                return {'error': f'Failed to get repository: {error_data.get("message", "Unknown error")}'}
             
-            default_branch = repo_response.json()['default_branch']
+            repo_data = repo_response.json()
+            if not repo_data:
+                return {'error': 'Empty response from GitHub API'}
+            
+            default_branch = repo_data.get('default_branch')
+            if not default_branch:
+                return {'error': 'Could not determine default branch from repository'}
             
             # Get the SHA of the default branch
             ref_url = f'https://api.github.com/repos/{owner}/{repo_name}/git/refs/heads/{default_branch}'
             ref_response = requests.get(ref_url, headers=headers)
             if ref_response.status_code != 200:
-                return {'error': f'Failed to get branch reference: {ref_response.json().get("message")}'}
+                error_data = ref_response.json() if ref_response.text else {}
+                return {'error': f'Failed to get branch reference: {error_data.get("message", "Unknown error")}'}
             
-            base_sha = ref_response.json()['object']['sha']
+            ref_data = ref_response.json()
+            if not ref_data or 'object' not in ref_data:
+                return {'error': 'Invalid branch reference response from GitHub'}
+            
+            base_sha = ref_data['object']['sha']
             
             # Step 2: Create a new branch
             create_ref_url = f'https://api.github.com/repos/{owner}/{repo_name}/git/refs'
@@ -240,7 +262,8 @@ class CodeEditor:
             create_ref_response = requests.post(create_ref_url, headers=headers, json=create_ref_data)
             
             if create_ref_response.status_code not in [200, 201]:
-                error_msg = create_ref_response.json().get('message', 'Unknown error')
+                error_data = create_ref_response.json() if create_ref_response.text else {}
+                error_msg = error_data.get('message', 'Unknown error')
                 # If branch already exists, try to delete and recreate
                 if 'already exists' in error_msg:
                     delete_ref_url = f'https://api.github.com/repos/{owner}/{repo_name}/git/refs/heads/{branch_name}'
@@ -272,6 +295,9 @@ class CodeEditor:
                         continue
                     
                     file_data = response.json()
+                    if not file_data or 'content' not in file_data:
+                        errors.append(f'{file_path}: Invalid file data from GitHub')
+                        continue
                     
                     # Decode base64 content
                     decoded_content = base64.b64decode(file_data['content']).decode('utf-8')
@@ -318,7 +344,8 @@ class CodeEditor:
                             'fixes_applied': len(file_fixes)
                         })
                     else:
-                        errors.append(f'{file_path}: {update_response.json().get("message", "Unknown error")}')
+                        error_data = update_response.json() if update_response.text else {}
+                        errors.append(f'{file_path}: {error_data.get("message", "Unknown error")}')
                         
                 except Exception as e:
                     errors.append(f'{file_path}: {str(e)}')
@@ -360,10 +387,16 @@ These changes improve code quality, performance, and maintainability based on AI
             
             if pr_response.status_code in [200, 201]:
                 pr_result = pr_response.json()
+                if not pr_result:
+                    return {
+                        'error': 'Empty response when creating PR',
+                        'branch_created': branch_name,
+                        'files_updated': updated_files
+                    }
                 return {
                     'success': True,
-                    'pr_number': pr_result['number'],
-                    'pr_url': pr_result['html_url'],
+                    'pr_number': pr_result.get('number'),
+                    'pr_url': pr_result.get('html_url'),
                     'branch': branch_name,
                     'files_updated': len(updated_files),
                     'total_fixes': len(fixes),
@@ -371,8 +404,9 @@ These changes improve code quality, performance, and maintainability based on AI
                     'errors': errors if errors else None
                 }
             else:
+                error_data = pr_response.json() if pr_response.text else {}
                 return {
-                    'error': f'Failed to create PR: {pr_response.json().get("message")}',
+                    'error': f'Failed to create PR: {error_data.get("message", "Unknown error")}',
                     'branch_created': branch_name,
                     'files_updated': updated_files
                 }

@@ -1487,7 +1487,7 @@ def get_test_sessions_by_project(project_id):
 @app.route('/api/search', methods=['POST'])
 def spotlight_search():
     """
-    Spotlight-style search across all indexed knowledge.
+    Hybrid spotlight search: combines RAG semantic search with SQL keyword search.
     Returns results with navigation URLs to specific page sections.
     """
     try:
@@ -1495,21 +1495,102 @@ def spotlight_search():
         query = data.get('query', '').strip()
         project_id = data.get('project_id')  # Optional filter
         limit = data.get('limit', 10)
+        search_mode = data.get('mode', 'hybrid')  # 'hybrid', 'rag', 'sql'
         
         if not query:
             return jsonify({'results': []}), 200
         
-        rag = get_rag_service()
-        results = rag.hybrid_search(
-            query=query,
-            project_id=project_id,
-            top_k=limit
-        )
+        all_results = []
+        
+        # RAG semantic search
+        if search_mode in ['hybrid', 'rag']:
+            try:
+                rag = get_rag_service()
+                rag_results = rag.hybrid_search(
+                    query=query,
+                    project_id=project_id,
+                    top_k=limit
+                )
+                all_results.extend(rag_results)
+            except Exception as e:
+                logger.error(f"RAG search failed: {str(e)}")
+        
+        # SQL keyword search
+        if search_mode in ['hybrid', 'sql']:
+            try:
+                with get_db() as db:
+                    sql_results = []
+                    search_pattern = f"%{query}%"
+                    
+                    # Search projects
+                    projects = db.query(Project).filter(
+                        (Project.name.ilike(search_pattern)) |
+                        (Project.description.ilike(search_pattern)) |
+                        (Project.repo_name.ilike(search_pattern))
+                    )
+                    if project_id:
+                        projects = projects.filter(Project.id == project_id)
+                    
+                    for project in projects.limit(5).all():
+                        sql_results.append({
+                            'id': f"project_{project.id}",
+                            'title': f"Project: {project.name}",
+                            'preview': project.description or 'No description',
+                            'url': f'/projects/{project.id}',
+                            'type': 'project_detail',
+                            'collection': 'projects',
+                            'score': 0.8,  # Fixed score for SQL results
+                            'metadata': {
+                                'project_id': project.id,
+                                'repo_url': project.repo_url,
+                                'source': 'sql'
+                            }
+                        })
+                    
+                    # Search test sessions
+                    sessions = db.query(TestSession).filter(
+                        TestSession.name.ilike(search_pattern)
+                    )
+                    if project_id:
+                        sessions = sessions.filter(TestSession.project_id == project_id)
+                    
+                    for session in sessions.limit(5).all():
+                        sql_results.append({
+                            'id': f"session_{session.id}",
+                            'title': f"Test Session: {session.name}",
+                            'preview': f"{session.total_tests} tests, {session.success_rate:.1f}% success rate",
+                            'url': f'/projects/{session.project_id}?session={session.id}',
+                            'type': 'report_detail',
+                            'collection': 'test_sessions',
+                            'score': 0.75,
+                            'metadata': {
+                                'session_id': session.id,
+                                'project_id': session.project_id,
+                                'success_rate': session.success_rate,
+                                'source': 'sql'
+                            }
+                        })
+                    
+                    all_results.extend(sql_results)
+                    
+            except Exception as e:
+                logger.error(f"SQL search failed: {str(e)}")
+        
+        # Deduplicate and sort by score
+        seen_ids = set()
+        unique_results = []
+        for result in all_results:
+            if result['id'] not in seen_ids:
+                seen_ids.add(result['id'])
+                unique_results.append(result)
+        
+        unique_results.sort(key=lambda x: x['score'], reverse=True)
         
         return jsonify({
-            'results': results,
+            'results': unique_results[:limit],
             'query': query,
-            'count': len(results)
+            'count': len(unique_results),
+            'mode': search_mode
         }), 200
         
     except Exception as e:

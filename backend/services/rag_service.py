@@ -5,12 +5,35 @@ Stores: agents, tools, reports, docs, test results, and all project context.
 
 import chromadb
 from chromadb.config import Settings
-from chromadb.utils import embedding_functions
+from fastembed import TextEmbedding
 import json
 import hashlib
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import os
+
+class FastEmbedEmbeddingFunction:
+    """Wrapper for FastEmbed to work with ChromaDB."""
+    def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5"):
+        self.model = TextEmbedding(model_name=model_name)
+        self._model_name = model_name
+    
+    def __call__(self, input: List[str]) -> List[List[float]]:
+        embeddings = list(self.model.embed(input))
+        return embeddings
+    
+    def embed_query(self, text: str) -> List[float]:
+        """Embed a single query text for ChromaDB query operations."""
+        embeddings = list(self.model.embed([text]))
+        return embeddings[0] if embeddings else []
+    
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        """Embed multiple documents for ChromaDB operations."""
+        return self.__call__(texts)
+    
+    def name(self) -> str:
+        """Return the model name for ChromaDB compatibility."""
+        return self._model_name
 
 class RAGService:
     def __init__(self):
@@ -27,9 +50,9 @@ class RAGService:
             )
         )
         
-        # Use HuggingFace sentence-transformers embeddings (local, no API key needed)
-        self.embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name="all-MiniLM-L6-v2"  # Fast and efficient model
+        # Use FastEmbed embeddings (very lightweight, 30MB model)
+        self.embedding_fn = FastEmbedEmbeddingFunction(
+            model_name="BAAI/bge-small-en-v1.5"  # 33MB, 384 dimensions
         )
         
         # Create collections for different types of knowledge
@@ -45,16 +68,29 @@ class RAGService:
     def _get_or_create_collection(self, name: str, description: str):
         """Get or create a collection with embeddings."""
         try:
+            # Try to get existing collection
             return self.client.get_collection(
                 name=name,
                 embedding_function=self.embedding_fn
             )
-        except:
-            return self.client.create_collection(
-                name=name,
-                embedding_function=self.embedding_fn,
-                metadata={"description": description}
-            )
+        except Exception as get_error:
+            # Collection doesn't exist, create it
+            try:
+                return self.client.create_collection(
+                    name=name,
+                    embedding_function=self.embedding_fn,
+                    metadata={"description": description}
+                )
+            except Exception as create_error:
+                # If creation fails because it exists, try to get it again
+                # This handles race conditions
+                try:
+                    return self.client.get_collection(
+                        name=name,
+                        embedding_function=self.embedding_fn
+                    )
+                except Exception as final_error:
+                    raise Exception(f"Failed to get or create collection {name}: {final_error}")
     
     def _generate_id(self, prefix: str, content: str) -> str:
         """Generate unique ID from content."""
