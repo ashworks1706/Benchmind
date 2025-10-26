@@ -93,11 +93,11 @@ export function ResearchReportModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 overflow-y-auto">
-      {/* Modal Container */}
-      <div className="relative w-full max-w-5xl bg-white dark:bg-gray-900 rounded-lg shadow-2xl my-8">
-        {/* Header Controls */}
-        <div className="flex items-center justify-between mb-6 pb-4 border-b border-border sticky top-0 bg-white dark:bg-gray-900 z-10 p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+      {/* Modal Container - Scrollable */}
+      <div className="relative w-full max-w-6xl max-h-[95vh] bg-white dark:bg-gray-900 rounded-lg shadow-2xl flex flex-col">
+        {/* Header Controls - Fixed */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-white dark:bg-gray-900 rounded-t-lg shrink-0">
           <h2 className="text-xl font-semibold">Research Report</h2>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={handleExportPDF}>
@@ -119,8 +119,10 @@ export function ResearchReportModal({
           </div>
         </div>
 
-        {/* Research Paper Content */}
-        <div
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto">
+          {/* Research Paper Content */}
+          <div
           ref={reportRef}
           className="p-12 space-y-8 bg-white dark:bg-gray-900 research-paper"
           style={{
@@ -782,6 +784,7 @@ export function ResearchReportModal({
           </section>
         </div>
       </div>
+    </div>
 
       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;0,700;1,400&display=swap');

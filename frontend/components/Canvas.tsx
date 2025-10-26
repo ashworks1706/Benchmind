@@ -299,7 +299,7 @@ export function Canvas() {
 
       return allNodes;
     });
-  }, [activeTestCases, agentData, testResults, isTestingInProgress, currentTestIndex]);
+  }, [activeTestCases, agentData, testResults, isTestingInProgress, currentTestIndex, isGeneratingTests]);
 
   // Update edge references when nodes move
   useEffect(() => {
@@ -645,11 +645,45 @@ export function Canvas() {
                       : 'drop-shadow(0 0 3px rgba(0,0,0,0.2))',
                   }}
                 />
-                {edge.data && (
+                {/* Connection cost label - show for all connection types */}
+                {(isAgentTool || !isTestTarget) && (() => {
+                  const connectionCost = edge.data ? 
+                    calculateConnectionCost(edge.data) : 
+                    { totalCost: 0.005, apiCalls: 100, inputTokens: 1000 }; // Default for agent-tool connections
+                  
+                  return (
+                    <>
+                      <text
+                        x={(fromX + toX) / 2}
+                        y={(fromY + toY) / 2 - (isAgentTool ? -15 : 35)}
+                        textAnchor="middle"
+                        fontSize="12"
+                        fontWeight="700"
+                        className="pointer-events-auto cursor-help select-none"
+                      >
+                        <title>
+                          {`Connection Cost: ${formatCost(connectionCost.totalCost)}/day | Data transfer overhead | Est. ${connectionCost.apiCalls} calls/day | ${connectionCost.inputTokens} tokens`}
+                        </title>
+                        <tspan
+                          style={{
+                            paintOrder: 'stroke',
+                            stroke: '#1f2937',
+                            strokeWidth: '3px',
+                            fill: '#fbbf24',
+                            fontWeight: 'bold',
+                          }}
+                        >
+                          💰 {formatCost(connectionCost.totalCost)}/day
+                        </tspan>
+                      </text>
+                    </>
+                  );
+                })()}
+                {edge.data && !isAgentTool && !isTestTarget && (
                   <>
                     <text
                       x={(fromX + toX) / 2}
-                      y={(fromY + toY) / 2 - (isAgentTool ? 0 : 50)}
+                      y={(fromY + toY) / 2 - 50}
                       textAnchor="middle"
                       fill={color}
                       fontSize="14"
@@ -667,31 +701,6 @@ export function Canvas() {
                         }}
                       >
                         {edge.data.type}
-                      </tspan>
-                    </text>
-                    
-                    {/* Cost label */}
-                    <text
-                      x={(fromX + toX) / 2}
-                      y={(fromY + toY) / 2 - (isAgentTool ? -15 : 35)}
-                      textAnchor="middle"
-                      fontSize="11"
-                      fontWeight="600"
-                      className="pointer-events-auto cursor-help select-none"
-                    >
-                      <title>
-                        {`Connection Cost: ${formatCost(calculateConnectionCost(edge.data).totalCost)}/day | Data transfer overhead | Est. ${calculateConnectionCost(edge.data).apiCalls} calls/day | ${calculateConnectionCost(edge.data).inputTokens} tokens | Click connection for detailed breakdown`}
-                      </title>
-                      <tspan
-                        x={(fromX + toX) / 2}
-                        style={{
-                          paintOrder: 'stroke',
-                          stroke: '#1f2937',
-                          strokeWidth: '2px',
-                          fill: '#10b981',
-                        }}
-                      >
-                        {formatCost(calculateConnectionCost(edge.data).totalCost)}/day
                       </tspan>
                     </text>
                   </>

@@ -156,4 +156,25 @@ export const apiService = {
     const response = await api.get(`/api/testing/report/${sessionId}`);
     return response.data;
   },
+
+  // Test Session APIs
+  createTestSession: async (sessionData: any) => {
+    const response = await api.post('/api/test-sessions', sessionData);
+    return response.data;
+  },
+
+  updateTestSession: async (sessionId: string, updates: any) => {
+    const response = await api.patch(`/api/test-sessions/${sessionId}`, updates);
+    return response.data;
+  },
+
+  getTestSessionsByAnalysis: async (analysisId: string) => {
+    const response = await api.get(`/api/test-sessions/analysis/${analysisId}`);
+    return response.data;
+  },
+
+  getTestSessionsByProject: async (projectId: string) => {
+    const response = await api.get(`/api/test-sessions/project/${projectId}`);
+    return response.data;
+  },
 };

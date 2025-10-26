@@ -169,11 +169,17 @@ import {
           const reportData = await apiService.getTestReport(testingSessionId);
           setTestReport(reportData.report);
           
-          // Extract fixes from report and assign unique IDs
+          // Extract fixes from report and assign unique IDs with proper test mapping
           const fixes = reportData.report?.recommendations?.map((rec: any, index: number) => ({
-            ...rec,
             id: `fix-${testingSessionId}-${index}`,
+            file_path: rec.file_path || rec.fix?.file_path || undefined,
+            description: rec.description || rec.title || 'Code improvement suggestion',
+            current_code: rec.current_code || rec.fix?.current_code || undefined,
+            suggested_code: rec.suggested_code || rec.fix?.suggested_code || rec.fix?.code || undefined,
+            severity: rec.severity || 'medium',
             status: 'pending',
+            test_name: rec.test_name || rec.title || `Test Case ${index + 1}`,
+            timestamp: new Date().toISOString(),
           })) || [];
           
           // Create test session with fixes
@@ -226,6 +232,56 @@ import {
               activeSessionIds: [testingSessionId],
             };
             addTestCollection(collection);
+            
+            // Save test session to database
+            if (currentAnalysisId) {
+              apiService.createTestSession({
+                id: testingSessionId,
+                analysis_id: currentAnalysisId,
+                project_id: currentAnalysisId, // Use analysis_id as project_id for now
+                name: testSession.name,
+                color: testSession.color,
+                test_cases: testSession.testCases,
+                test_report: testSession.testReport,
+                fixes: testSession.fixes,
+                total_tests: testSession.metadata.totalTests,
+                passed_tests: testSession.metadata.passedTests,
+                failed_tests: testSession.metadata.failedTests,
+                warning_tests: testSession.metadata.warningTests,
+                success_rate: testSession.metadata.successRate,
+                total_fixes: testSession.metadata.totalFixes,
+                pending_fixes: testSession.metadata.pendingFixes,
+                accepted_fixes: testSession.metadata.acceptedFixes,
+                rejected_fixes: testSession.metadata.rejectedFixes,
+                fixes_locked: testSession.fixesLocked,
+              }).catch((error) => {
+                console.error('Error saving test session to database:', error);
+              });
+            } else {
+              // Save without analysis_id if not available
+              apiService.createTestSession({
+                id: testingSessionId,
+                analysis_id: null,
+                project_id: null,
+                name: testSession.name,
+                color: testSession.color,
+                test_cases: testSession.testCases,
+                test_report: testSession.testReport,
+                fixes: testSession.fixes,
+                total_tests: testSession.metadata.totalTests,
+                passed_tests: testSession.metadata.passedTests,
+                failed_tests: testSession.metadata.failedTests,
+                warning_tests: testSession.metadata.warningTests,
+                success_rate: testSession.metadata.successRate,
+                total_fixes: testSession.metadata.totalFixes,
+                pending_fixes: testSession.metadata.pendingFixes,
+                accepted_fixes: testSession.metadata.acceptedFixes,
+                rejected_fixes: testSession.metadata.rejectedFixes,
+                fixes_locked: testSession.fixesLocked,
+              }).catch((error) => {
+                console.error('Error saving test session to database:', error);
+              });
+            }
             
             // Auto-open Progress Report Modal (forces user to review fixes)
             setTimeout(() => {

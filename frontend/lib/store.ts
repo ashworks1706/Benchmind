@@ -363,6 +363,55 @@ export const useStore = create<AppState>((set) => ({
         if (Object.keys(updates).length > 0) {
           set(updates);
         }
+        
+        // Load test sessions from database if we have an analysis ID
+        if (savedAnalysisId) {
+          const { apiService } = require('@/lib/api');
+          apiService.getTestSessionsByAnalysis(savedAnalysisId)
+            .then((response: any) => {
+              if (response.sessions && response.sessions.length > 0) {
+                // Merge with existing collections or create new one
+                const existingCollections = useStore.getState().testCollections;
+                const updatedCollections = existingCollections.map(collection => {
+                  const sessionsForCollection = response.sessions.filter(
+                    (s: any) => s.analysis_id === savedAnalysisId
+                  );
+                  if (sessionsForCollection.length > 0) {
+                    return {
+                      ...collection,
+                      testSessions: sessionsForCollection.map((s: any) => ({
+                        id: s.id,
+                        name: s.name,
+                        color: s.color,
+                        testCases: s.test_cases,
+                        testReport: s.test_report,
+                        createdAt: s.created_at,
+                        completedAt: s.completed_at,
+                        metadata: {
+                          totalTests: s.total_tests,
+                          passedTests: s.passed_tests,
+                          failedTests: s.failed_tests,
+                          warningTests: s.warning_tests,
+                          successRate: s.success_rate,
+                          totalFixes: s.total_fixes,
+                          pendingFixes: s.pending_fixes,
+                          acceptedFixes: s.accepted_fixes,
+                          rejectedFixes: s.rejected_fixes,
+                        },
+                        fixes: s.fixes,
+                        fixesLocked: s.fixes_locked,
+                      })),
+                    };
+                  }
+                  return collection;
+                });
+                set({ testCollections: updatedCollections });
+              }
+            })
+            .catch((error: any) => {
+              console.error('Error loading test sessions from database:', error);
+            });
+        }
       } catch (error) {
         console.error('Error loading from localStorage:', error);
       }
