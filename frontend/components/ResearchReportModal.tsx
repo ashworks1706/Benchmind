@@ -373,7 +373,10 @@ export function ResearchReportModal({ testReport, testCases, onClose }: Research
                               <div className="mt-2 p-3 bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700">
                                 <p className="text-xs font-semibold mb-1">Suggested Fix:</p>
                                 <p className="text-sm font-mono text-green-700 dark:text-green-300">
-                                  {issue.fix.description || issue.fix}
+                                  {typeof issue.fix === 'object' 
+                                    ? (issue.fix.description || issue.fix.suggested_code || issue.fix.code || JSON.stringify(issue.fix))
+                                    : issue.fix
+                                  }
                                 </p>
                               </div>
                             )}
@@ -416,13 +419,16 @@ export function ResearchReportModal({ testReport, testCases, onClose }: Research
                             {rec.fix && (
                               <div className="mt-2 p-2 bg-white dark:bg-gray-900 rounded text-xs">
                                 <p className="font-semibold mb-1">💡 Suggested Fix:</p>
-                                {rec.fix.file_path && (
+                                {typeof rec.fix === 'object' && rec.fix.file_path && (
                                   <p className="text-gray-600 dark:text-gray-400 mb-1">
                                     File: <code className="font-mono">{rec.fix.file_path}</code>
                                   </p>
                                 )}
                                 <p className="font-mono text-green-700 dark:text-green-300">
-                                  {rec.fix.description || rec.fix.code || rec.fix}
+                                  {typeof rec.fix === 'object' 
+                                    ? (rec.fix.description || rec.fix.suggested_code || rec.fix.code || JSON.stringify(rec.fix))
+                                    : rec.fix
+                                  }
                                 </p>
                               </div>
                             )}

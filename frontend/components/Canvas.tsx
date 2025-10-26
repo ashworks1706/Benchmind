@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useStore } from '@/lib/store';
-import { Agent, Tool, Relationship, TestCase } from '@/types';
+import { Agent, Tool, TestCase, Relationship } from '@/types';
 import { getTestCaseColor } from '@/lib/testColors';
+import { calculateAgentCost, calculateToolCost, calculateConnectionCost, formatCost, getCostColor } from '@/lib/costCalculator';
 
 interface CanvasNode {
   id: string;
@@ -613,28 +614,52 @@ export function Canvas() {
                   }}
                 />
                 {edge.data && (
-                  <text
-                    x={(fromX + toX) / 2}
-                    y={(fromY + toY) / 2 - (isAgentTool ? 0 : 50)}
-                    textAnchor="middle"
-                    fill={color}
-                    fontSize="14"
-                    fontWeight="700"
-                    className="pointer-events-none select-none"
-                  >
-                    <tspan
+                  <>
+                    <text
                       x={(fromX + toX) / 2}
-                      dy="-5"
-                      style={{
-                        paintOrder: 'stroke',
-                        stroke: '#1f2937',
-                        strokeWidth: '3px',
-                        fill: color,
-                      }}
+                      y={(fromY + toY) / 2 - (isAgentTool ? 0 : 50)}
+                      textAnchor="middle"
+                      fill={color}
+                      fontSize="14"
+                      fontWeight="700"
+                      className="pointer-events-none select-none"
                     >
-                      {edge.data.type}
-                    </tspan>
-                  </text>
+                      <tspan
+                        x={(fromX + toX) / 2}
+                        dy="-5"
+                        style={{
+                          paintOrder: 'stroke',
+                          stroke: '#1f2937',
+                          strokeWidth: '3px',
+                          fill: color,
+                        }}
+                      >
+                        {edge.data.type}
+                      </tspan>
+                    </text>
+                    
+                    {/* Cost label */}
+                    <text
+                      x={(fromX + toX) / 2}
+                      y={(fromY + toY) / 2 - (isAgentTool ? -15 : 35)}
+                      textAnchor="middle"
+                      fontSize="11"
+                      fontWeight="600"
+                      className="pointer-events-none select-none"
+                    >
+                      <tspan
+                        x={(fromX + toX) / 2}
+                        style={{
+                          paintOrder: 'stroke',
+                          stroke: '#1f2937',
+                          strokeWidth: '2px',
+                          fill: '#10b981',
+                        }}
+                      >
+                        {formatCost(calculateConnectionCost(edge.data).totalCost)}/day
+                      </tspan>
+                    </text>
+                  </>
                 )}
               </g>
             );
@@ -807,6 +832,8 @@ export function Canvas() {
 
 // Agent Node Component
 function AgentNode({ data }: { data: Agent }) {
+  const cost = calculateAgentCost(data);
+  
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-3">
@@ -823,20 +850,27 @@ function AgentNode({ data }: { data: Agent }) {
         </div>
       </div>
       
-      {data.tools && data.tools.length > 0 && (
-        <div className="flex items-center gap-2 mt-1">
-          <span className="text-lg">🔧</span>
-          <span className="text-sm font-semibold text-green-700 dark:text-green-400">
-            {data.tools.length} {data.tools.length === 1 ? 'tool' : 'tools'}
-          </span>
+      <div className="flex items-center justify-between gap-2 mt-1">
+        {data.tools && data.tools.length > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🔧</span>
+            <span className="text-sm font-semibold text-green-700 dark:text-green-400">
+              {data.tools.length} {data.tools.length === 1 ? 'tool' : 'tools'}
+            </span>
+          </div>
+        )}
+        <div className={`text-xs font-bold ${getCostColor(cost.totalCost)}`}>
+          💰 {formatCost(cost.totalCost)}/day
         </div>
-      )}
+      </div>
     </div>
   );
 }
 
 // Tool Node Component
 function ToolNode({ data }: { data: Tool }) {
+  const cost = calculateToolCost(data);
+  
   return (
     <div className="flex flex-col items-center gap-1.5">
       <div className="w-7 h-7 rounded-lg bg-green-500/20 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
@@ -844,6 +878,9 @@ function ToolNode({ data }: { data: Tool }) {
       </div>
       <span className="text-xs font-semibold text-green-700 dark:text-green-300 text-center line-clamp-2 leading-tight">
         {data.name}
+      </span>
+      <span className={`text-[10px] font-bold ${getCostColor(cost.totalCost)}`}>
+        {formatCost(cost.totalCost)}/day
       </span>
     </div>
   );

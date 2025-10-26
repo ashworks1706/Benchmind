@@ -3,9 +3,210 @@
 import { useStore } from '@/lib/store';
 import { ScrollArea } from './ui/ScrollArea';
 import { Agent, Tool, Relationship, TestCase } from '@/types';
-import { X, Save } from 'lucide-react';
+import { X, Save, HelpCircle } from 'lucide-react';
 import { useState } from 'react';
 import { apiService } from '@/lib/api';
+import { calculateAgentCost, calculateToolCost, calculateConnectionCost, formatCost, getCostColor } from '@/lib/costCalculator';
+
+// Cost Information Popup Component
+function CostInfoPopup({ type }: { type: 'agent' | 'tool' | 'connection' }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  const getContent = () => {
+    switch (type) {
+      case 'agent':
+        return {
+          title: 'Agent Cost Calculation',
+          sections: [
+            {
+              heading: '📊 Methodology',
+              content: 'Agent costs are calculated based on LLM API usage, including both input and output tokens processed per interaction.'
+            },
+            {
+              heading: '🔢 Formula',
+              content: 'Total Cost = (Input Tokens × Input Price) + (Output Tokens × Output Price) × API Calls/Day',
+              code: true
+            },
+            {
+              heading: '💵 Model Pricing (per 1M tokens)',
+              list: [
+                'GPT-4: $30 input / $60 output',
+                'GPT-4 Turbo: $10 input / $30 output',
+                'Claude 3.5 Sonnet: $3 input / $15 output',
+                'Claude 3 Haiku: $0.25 input / $1.25 output',
+                'Gemini 1.5 Pro: $1.25 input / $5 output',
+                'Gemini 1.5 Flash: $0.075 input / $0.30 output',
+              ]
+            },
+            {
+              heading: '📈 Assumptions',
+              list: [
+                'Avg. Input: 500 tokens (system prompt + user context)',
+                'Avg. Output: 200 tokens (agent response)',
+                'Est. API Calls: 10 per day (configurable)',
+                'Token Estimation: ~4 characters per token',
+              ]
+            },
+            {
+              heading: '🎯 Accuracy Notes',
+              content: 'These are estimates based on typical usage patterns. Actual costs may vary based on prompt complexity, response length, and call frequency. Monitor actual API usage for precise costs.'
+            }
+          ]
+        };
+      case 'tool':
+        return {
+          title: 'Tool Cost Calculation',
+          sections: [
+            {
+              heading: '📊 Methodology',
+              content: 'Tool costs represent execution overhead. Most tools don\'t make direct LLM calls, so costs are minimal compared to agents.'
+            },
+            {
+              heading: '🔢 Formula',
+              content: 'Total Cost = Execution Cost × Executions/Day',
+              code: true
+            },
+            {
+              heading: '💵 Cost Breakdown',
+              list: [
+                'Base Execution: $0.0001 per call',
+                'No LLM token costs (unless tool uses AI)',
+                'Est. Executions: 5 per day (typical)',
+              ]
+            },
+            {
+              heading: '⚡ Why So Low?',
+              content: 'Tools are typically simple functions (database queries, API calls, calculations) that don\'t require expensive LLM inference. They\'re invoked by agents but don\'t generate text.'
+            },
+            {
+              heading: '🎯 Exceptions',
+              content: 'Some tools may integrate with external paid APIs or make their own LLM calls. In those cases, costs would be higher and should be factored separately.'
+            }
+          ]
+        };
+      case 'connection':
+        return {
+          title: 'Connection Cost Calculation',
+          sections: [
+            {
+              heading: '📊 Methodology',
+              content: 'Connection costs represent data transfer and coordination overhead between agents and tools.'
+            },
+            {
+              heading: '🔢 Formula',
+              content: 'Total Cost = (Data Transfer Cost + Coordination Overhead) × Calls/Day',
+              code: true
+            },
+            {
+              heading: '💵 Cost Breakdown',
+              list: [
+                'Data Transfer: $0.00005 per call',
+                'Token Processing: Minimal (metadata only)',
+                'Est. Calls: 10 per day (typical)',
+              ]
+            },
+            {
+              heading: '📡 What\'s Included',
+              content: 'Costs include serialization/deserialization of data, inter-process communication overhead, and minimal token processing for routing and coordination logic.'
+            },
+            {
+              heading: '🎯 Scale Considerations',
+              content: 'At high volumes (1000+ calls/day), connection costs can become significant. Consider batching or optimizing data flow for high-frequency connections.'
+            }
+          ]
+        };
+    }
+  };
+
+  const content = getContent();
+
+  return (
+    <div className="relative inline-block">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="ml-2 p-0.5 rounded-full hover:bg-muted transition-colors"
+        title="How is this cost calculated?"
+      >
+        <HelpCircle className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+      </button>
+
+      {isOpen && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setIsOpen(false)}
+          />
+          
+          {/* Popup */}
+          <div className="absolute left-0 top-6 z-50 w-96 max-h-[500px] overflow-y-auto bg-background border-2 border-primary/20 rounded-lg shadow-2xl p-4">
+            <div className="flex items-start justify-between mb-3 sticky top-0 bg-background pb-2 border-b">
+              <h4 className="font-bold text-sm text-primary flex items-center gap-2">
+                🧮 {content.title}
+              </h4>
+              <button
+                onClick={() => setIsOpen(false)}
+                className="p-0.5 rounded hover:bg-muted"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {content.sections.map((section, idx) => (
+                <div key={idx} className="space-y-1">
+                  <h5 className="font-semibold text-xs text-foreground">
+                    {section.heading}
+                  </h5>
+                  {section.content && (
+                    <p className={`text-xs text-muted-foreground leading-relaxed ${
+                      section.code ? 'font-mono bg-muted/50 p-2 rounded' : ''
+                    }`}>
+                      {section.content}
+                    </p>
+                  )}
+                  {section.list && (
+                    <ul className="space-y-0.5 text-xs text-muted-foreground">
+                      {section.list.map((item, i) => (
+                        <li key={i} className="flex items-start gap-1.5">
+                          <span className="text-primary mt-0.5">•</span>
+                          <span className="flex-1">{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Color Legend */}
+            <div className="mt-4 pt-3 border-t space-y-1">
+              <h5 className="font-semibold text-xs text-foreground mb-2">🎨 Cost Color Coding</h5>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-full bg-green-500" />
+                  <span className="text-muted-foreground">&lt; $0.01 (Low)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-full bg-yellow-500" />
+                  <span className="text-muted-foreground">$0.01-0.10 (Med)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-full bg-orange-500" />
+                  <span className="text-muted-foreground">$0.10-1.00 (High)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-full bg-red-500" />
+                  <span className="text-muted-foreground">&gt; $1.00 (V.High)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 export function DetailsPanel() {
   const { selectedElement, setSelectedElement, agentData, addStatusMessage } = useStore();
@@ -162,6 +363,51 @@ function AgentDetails({ agent }: { agent: Agent }) {
           </div>
         )}
       </div>
+      
+      {/* Cost Analysis Section */}
+      {(() => {
+        const cost = calculateAgentCost(agent);
+        return (
+          <div className="p-3 rounded-lg border-2 border-green-500/30 bg-green-500/5">
+            <h5 className="font-semibold text-sm text-green-700 dark:text-green-300 mb-2 flex items-center">
+              💰 Cost Analysis
+              <CostInfoPopup type="agent" />
+            </h5>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Daily Cost:</span>
+                <span className={`text-sm font-mono font-semibold ${getCostColor(cost.totalCost)}`}>
+                  {formatCost(cost.totalCost)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Monthly Cost:</span>
+                <span className={`text-sm font-mono font-semibold ${getCostColor(cost.totalCost * 30)}`}>
+                  {formatCost(cost.totalCost * 30)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Est. API Calls/Day:</span>
+                <span className="text-sm font-mono">{cost.apiCalls}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Model:</span>
+                <span className="text-xs font-mono bg-background px-2 py-0.5 rounded">
+                  {agent.model_config.model}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Avg Input Tokens:</span>
+                <span className="text-xs font-mono">{cost.inputTokens}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Avg Output Tokens:</span>
+                <span className="text-xs font-mono">{cost.outputTokens}</span>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       
       {isTestingActive && (
         <div className="p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
@@ -341,6 +587,40 @@ function ToolDetails({ tool }: { tool: Tool }) {
         </div>
       </div>
 
+      {/* Cost Analysis Section */}
+      {(() => {
+        const cost = calculateToolCost(tool);
+        return (
+          <div className="p-3 rounded-lg border-2 border-green-500/30 bg-green-500/5">
+            <h5 className="font-semibold text-sm text-green-700 dark:text-green-300 mb-2 flex items-center">
+              💰 Cost Analysis
+              <CostInfoPopup type="tool" />
+            </h5>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Daily Cost:</span>
+                <span className={`text-sm font-mono font-semibold ${getCostColor(cost.totalCost)}`}>
+                  {formatCost(cost.totalCost)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Monthly Cost:</span>
+                <span className={`text-sm font-mono font-semibold ${getCostColor(cost.totalCost * 30)}`}>
+                  {formatCost(cost.totalCost * 30)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Est. Executions/Day:</span>
+                <span className="text-sm font-mono">{cost.apiCalls}</span>
+              </div>
+              <div className="text-xs text-muted-foreground mt-2 p-2 bg-background/50 rounded">
+                💡 Tool costs are minimal (execution overhead only, no LLM calls)
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       <DetailSection label="Description" value={tool.description} />
       <DetailSection label="Summary" value={tool.summary} />
       <DetailSection label="Return Type" value={tool.return_type} />
@@ -384,6 +664,9 @@ function RelationshipDetails({ relationship }: { relationship: Relationship }) {
   const fromAgent = agentData?.agents.find((a) => a.id === relationship.from_agent_id);
   const toAgent = agentData?.agents.find((a) => a.id === relationship.to_agent_id);
   
+  // Calculate cost
+  const cost = calculateConnectionCost(relationship);
+  
   // Get repository info for GitHub links
   const repoInfo = agentData?.repository;
   const fromGithubUrl = repoInfo && fromAgent ? `https://github.com/${repoInfo.owner}/${repoInfo.repo_name}/blob/main/${fromAgent.file_path}` : null;
@@ -396,6 +679,35 @@ function RelationshipDetails({ relationship }: { relationship: Relationship }) {
       <DetailSection label="Type" value={relationship.type} />
       <DetailSection label="Description" value={relationship.description} />
       <DetailSection label="Data Flow" value={relationship.data_flow} />
+      
+      {/* Cost Information */}
+      <div className="p-3 rounded-lg border-2 border-green-500/30 bg-green-500/5">
+        <h5 className="font-semibold text-sm text-green-700 dark:text-green-300 mb-2 flex items-center gap-2">
+          💰 Cost Analysis
+        </h5>
+        <div className="space-y-2 text-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Daily Cost:</span>
+            <span className={`font-bold ${getCostColor(cost.totalCost)}`}>
+              {formatCost(cost.totalCost)}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Monthly Cost:</span>
+            <span className={`font-bold ${getCostColor(cost.totalCost * 30)}`}>
+              {formatCost(cost.totalCost * 30)}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Est. API Calls/Day:</span>
+            <span className="font-semibold">{cost.apiCalls}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Data Tokens:</span>
+            <span className="font-semibold">{cost.inputTokens}</span>
+          </div>
+        </div>
+      </div>
       
       {/* From Agent Location */}
       <div className="p-3 rounded-lg border-2 border-red-500/30 bg-red-500/5">
