@@ -11,7 +11,6 @@ import { DetailsPanel } from '@/components/DetailsPanel';
 import TestingPanel from '@/components/TestingPanel';
 import TestReportPanel from '@/components/TestReportPanel';
 import { TestSuitesPanel } from '@/components/TestSuitesPanel';
-import ChangeQueuePanel from '@/components/ChangeQueuePanel';
 import { Loader2, Database, Trash2, Activity, Beaker, ArrowLeft, FileText } from 'lucide-react';
 import { Project } from '@/types/project';
 
@@ -444,7 +443,6 @@ export default function ProjectDetailPage() {
       </div>
       
       {/* Change Queue Panel - Bottom Left */}
-      <ChangeQueuePanel />
     </div>
   );
 }

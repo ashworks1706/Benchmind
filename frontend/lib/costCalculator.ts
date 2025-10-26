@@ -22,6 +22,13 @@ export interface CostEstimate {
   apiCalls: number;
 }
 
+export interface CostMultipliers {
+  reasoning: number;      // 0.5 - 1.5 (affects token usage)
+  accuracy: number;       // 0.5 - 1.5 (affects API calls)
+  costOptimization: number; // 0.5 - 1.5 (affects overall cost)
+  speed: number;          // 0.5 - 1.5 (affects calls per day)
+}
+
 /**
  * Estimate tokens from text length
  */
@@ -37,7 +44,8 @@ export function calculateAgentCost(
   agent: any,
   avgInputTokens = 500,
   avgOutputTokens = 200,
-  callsPerDay = 10
+  callsPerDay = 10,
+  multipliers?: CostMultipliers
 ): CostEstimate {
   // Determine model from agent config or use default
   const model = agent.model || agent.config?.model || 'gemini-flash';
@@ -47,8 +55,14 @@ export function calculateAgentCost(
   const codeTokens = agent.code ? estimateTokens(agent.code) : 0;
   const promptTokens = agent.system_prompt ? estimateTokens(agent.system_prompt) : 0;
   
-  const inputTokens = avgInputTokens + promptTokens;
-  const outputTokens = avgOutputTokens;
+  // Apply reasoning multiplier to token usage (more reasoning = more tokens)
+  const reasoningMultiplier = multipliers?.reasoning ?? 1.0;
+  const accuracyMultiplier = multipliers?.accuracy ?? 1.0;
+  const costMultiplier = multipliers?.costOptimization ?? 1.0;
+  const speedMultiplier = multipliers?.speed ?? 1.0;
+  
+  const inputTokens = (avgInputTokens + promptTokens) * reasoningMultiplier;
+  const outputTokens = avgOutputTokens * reasoningMultiplier;
   
   // Cost per call
   const costPerCall = (
@@ -56,15 +70,16 @@ export function calculateAgentCost(
     (outputTokens * modelCost.output / 1_000_000)
   );
   
-  // Estimate daily/monthly costs
-  const totalCost = costPerCall * callsPerDay;
+  // Apply multipliers: accuracy affects call frequency, speed affects daily calls, cost optimization reduces overall cost
+  const adjustedCallsPerDay = callsPerDay * accuracyMultiplier * speedMultiplier;
+  const totalCost = costPerCall * adjustedCallsPerDay / costMultiplier;
   
   return {
-    inputTokens,
-    outputTokens,
+    inputTokens: Math.round(inputTokens),
+    outputTokens: Math.round(outputTokens),
     totalCost,
     model,
-    apiCalls: callsPerDay,
+    apiCalls: Math.round(adjustedCallsPerDay),
   };
 }
 

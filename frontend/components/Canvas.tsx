@@ -63,6 +63,9 @@ export function Canvas() {
   const [nodeDragStart, setNodeDragStart] = useState({ x: 0, y: 0 });
   const [showAgents, setShowAgents] = useState(true);
   const [showTools, setShowTools] = useState(true);
+  const [hiddenNodeIds, setHiddenNodeIds] = useState<Set<string>>(new Set());
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
 
   // Auto-fit zoom function
   const autoFitZoom = useCallback(() => {
@@ -119,6 +122,15 @@ export function Canvas() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, [nodes.length, autoFitZoom]);
+
+  // Auto-fit when visibility toggles change
+  useEffect(() => {
+    if (nodes.length > 0) {
+      // Small delay to let nodes render
+      const timer = setTimeout(() => autoFitZoom(), 100);
+      return () => clearTimeout(timer);
+    }
+  }, [showAgents, showTools, autoFitZoom, nodes.length]);
 
   // Use pendingTestCases or testCases - whichever has data
   const activeTestCases = pendingTestCases.length > 0 ? pendingTestCases : testCases;
@@ -220,6 +232,25 @@ export function Canvas() {
     ? getTestCaseColor(activeTestCases.findIndex(tc => tc.id === currentRunningTestId))
     : null;
 
+  // Calculate connected nodes for hover effect
+  const connectedNodeIds = useMemo(() => {
+    if (!hoveredNodeId) return new Set<string>();
+    
+    const connected = new Set<string>();
+    connected.add(hoveredNodeId); // Include the hovered node itself
+    
+    edges.forEach(edge => {
+      if (edge.from.id === hoveredNodeId) {
+        connected.add(edge.to.id);
+      }
+      if (edge.to.id === hoveredNodeId) {
+        connected.add(edge.from.id);
+      }
+    });
+    
+    return connected;
+  }, [hoveredNodeId, edges]);
+
   // Build graph from agent data with alternating zigzag pattern
   useEffect(() => {
     if (!agentData) return;
@@ -233,8 +264,11 @@ export function Canvas() {
     const toolOffsetX = 250; // Offset tools to the right of agents
     const toolSpacing = 180; // Vertical space between tools
     
+    // Filter agents and tools based on visibility toggles
+    const visibleAgents = showAgents ? agentData.agents : [];
+    
     // Create agent nodes in alternating up/down pattern
-    agentData.agents.forEach((agent, idx) => {
+    visibleAgents.forEach((agent, idx) => {
       // Alternate between top (y=100) and bottom (y=100+verticalSpacing)
       const isTopRow = idx % 2 === 0;
       const col = Math.floor(idx / 2); // Two agents per column pair
@@ -256,7 +290,10 @@ export function Canvas() {
         .map(toolName => agentData.tools.find(t => t.name === toolName))
         .filter(Boolean) as Tool[];
 
-      agentTools.forEach((tool, toolIdx) => {
+      // Only show tools if showTools is enabled
+      const toolsToShow = showTools ? agentTools : [];
+
+      toolsToShow.forEach((tool, toolIdx) => {
         const toolNodeId = `${agent.id}-tool-${tool.id}`;
         
         const toolNode: CanvasNode = {
@@ -316,7 +353,7 @@ export function Canvas() {
 
     setNodes(newNodes);
     setEdges(newEdges);
-  }, [agentData]);
+  }, [agentData, showAgents, showTools]);
 
   // Add test nodes when test cases are available with alternating pattern
   useEffect(() => {
@@ -506,11 +543,31 @@ export function Canvas() {
     }));
   }, [nodes]);
 
+  // Handler to hide/show a node
+  const toggleNodeVisibility = useCallback((nodeId: string) => {
+    setHiddenNodeIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(nodeId)) {
+        newSet.delete(nodeId);
+      } else {
+        newSet.add(nodeId);
+      }
+      return newSet;
+    });
+    setContextMenu(null);
+  }, []);
+
+  // Handler to show all hidden nodes
+  const showAllNodes = useCallback(() => {
+    setHiddenNodeIds(new Set());
+  }, []);
+
   // Pan handlers
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.target === e.currentTarget || (e.target as HTMLElement).classList.contains('canvas-background')) {
       setIsDragging(true);
       setDragStart({ x: e.clientX - transform.x, y: e.clientY - transform.y });
+      setContextMenu(null); // Close context menu
     }
   }, [transform]);
 
@@ -715,6 +772,11 @@ export function Canvas() {
           </defs>
           
           {edges.map((edge) => {
+            // Skip edge if either node is hidden
+            if (hiddenNodeIds.has(edge.from.id) || hiddenNodeIds.has(edge.to.id)) {
+              return null;
+            }
+
             const fromX = edge.from.x + edge.from.width / 2;
             const fromY = edge.from.y + edge.from.height / 2;
             const toX = edge.to.x + edge.to.width / 2;
@@ -749,6 +811,12 @@ export function Canvas() {
               errorHighlightedElements.has(edge.from.id) || 
               errorHighlightedElements.has(edge.to.id) ||
               (edge.to.type !== 'test' && errorHighlightedElements.has(edge.to.data.id))
+            );
+            
+            // Check if edge is connected to hovered node
+            const isHoverHighlighted = hoveredNodeId && (
+              edge.from.id === hoveredNodeId || 
+              edge.to.id === hoveredNodeId
             );
             
             // Determine marker based on highlight state and edge type
@@ -795,8 +863,11 @@ export function Canvas() {
               strokeColor = '#ef4444'; // Red for errors
               strokeWidth2 = strokeWidth + 3;
             } else if (isEdgeHighlighted || isTestEdgeHighlighted) {
-              strokeColor = '#3b82f6'; // Blue for test edges, yellow for others
+              strokeColor = '#3b82f6'; // Blue for test edges
               strokeWidth2 = strokeWidth + 2;
+            } else if (isHoverHighlighted) {
+              strokeColor = '#8b5cf6'; // Purple for hover
+              strokeWidth2 = strokeWidth + 1;
             }
 
             return (
@@ -828,7 +899,10 @@ export function Canvas() {
                       ? 'drop-shadow(0 0 12px rgba(239, 68, 68, 0.9))'
                       : (isEdgeHighlighted || isTestEdgeHighlighted)
                       ? 'drop-shadow(0 0 10px rgba(59, 130, 246, 0.8))'
+                      : isHoverHighlighted
+                      ? 'drop-shadow(0 0 8px rgba(139, 92, 246, 0.7))'
                       : 'drop-shadow(0 0 3px rgba(0,0,0,0.2))',
+                    opacity: hoveredNodeId ? (isHoverHighlighted ? 1 : 0.3) : 1,
                   }}
                 />
                 {/* Connection cost label - show for all connection types */}
@@ -1033,6 +1107,15 @@ export function Canvas() {
             effectClass = 'hover:scale-105';
           }
 
+          // Skip rendering if node is hidden
+          if (hiddenNodeIds.has(node.id)) {
+            return null;
+          }
+
+          // Check if this node is connected to hovered node
+          const isConnectedToHovered = hoveredNodeId && connectedNodeIds.has(node.id) && node.id !== hoveredNodeId;
+          const isCurrentlyHovered = node.id === hoveredNodeId;
+
           return (
             <div
               key={node.id}
@@ -1042,15 +1125,28 @@ export function Canvas() {
                   : isTest
                   ? `group px-3 py-2.5 rounded-lg border-2 shadow-md hover:shadow-lg ${borderClass} ${bgClass} ${effectClass}`
                   : `group px-3 py-2.5 rounded-lg border-2 shadow-md hover:shadow-lg ${borderClass} ${bgClass} ${effectClass}`
-              }`}
+              } ${isConnectedToHovered ? 'ring-2 ring-purple-400/60' : ''} ${isCurrentlyHovered ? 'ring-4 ring-purple-500/80' : ''}`}
               style={{
                 left: node.x,
                 top: node.y,
                 width: node.width,
                 backdropFilter: 'blur(10px)',
+                opacity: hoveredNodeId ? (isCurrentlyHovered || isConnectedToHovered ? 1 : 0.4) : 1,
+                transform: isConnectedToHovered ? 'scale(1.05)' : isCurrentlyHovered ? 'scale(1.08)' : 'scale(1)',
                 ...customStyle,
               }}
               onMouseDown={(e) => handleNodeMouseDown(e, node)}
+              onMouseEnter={() => setHoveredNodeId(node.id)}
+              onMouseLeave={() => setHoveredNodeId(null)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setContextMenu({
+                  x: e.clientX,
+                  y: e.clientY,
+                  nodeId: node.id,
+                });
+              }}
               onClick={(e) => {
                 if (!draggedNode) {
                   e.stopPropagation();
@@ -1058,6 +1154,18 @@ export function Canvas() {
                 }
               }}
             >
+              {/* Quick hide button on hover */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleNodeVisibility(node.id);
+                }}
+                className="absolute top-1 right-1 w-6 h-6 rounded-full bg-background/90 border border-border shadow-md opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center hover:bg-muted hover:scale-110"
+                title="Hide this node"
+              >
+                <span className="text-xs">👁️</span>
+              </button>
+
               {isAgent ? (
                 <>
                   <AgentNode data={node.data as Agent} />
@@ -1114,6 +1222,57 @@ export function Canvas() {
           ⊡
         </button>
       </div>
+
+      {/* Visibility toggles */}
+      <div className="absolute bottom-4 left-16 flex flex-col gap-2 bg-background border border-border rounded-lg shadow-lg p-3">
+        <label className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded px-2 py-1 transition-colors">
+          <input
+            type="checkbox"
+            checked={showAgents}
+            onChange={(e) => setShowAgents(e.target.checked)}
+            className="w-4 h-4 rounded border-border accent-blue-500 cursor-pointer"
+          />
+          <span className="text-xs font-medium text-foreground/80 select-none">Agents</span>
+        </label>
+        <label className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded px-2 py-1 transition-colors">
+          <input
+            type="checkbox"
+            checked={showTools}
+            onChange={(e) => setShowTools(e.target.checked)}
+            className="w-4 h-4 rounded border-border accent-green-500 cursor-pointer"
+          />
+          <span className="text-xs font-medium text-foreground/80 select-none">Tools</span>
+        </label>
+        {hiddenNodeIds.size > 0 && (
+          <button
+            onClick={showAllNodes}
+            className="mt-1 px-2 py-1 text-xs font-medium text-foreground/80 hover:bg-muted/50 rounded transition-colors border-t border-border/50 pt-2"
+            title={`Show ${hiddenNodeIds.size} hidden node(s)`}
+          >
+            👁️ Show All ({hiddenNodeIds.size})
+          </button>
+        )}
+      </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div
+          className="fixed bg-background border border-border rounded-lg shadow-xl py-1 z-50"
+          style={{
+            left: contextMenu.x,
+            top: contextMenu.y,
+          }}
+          onMouseLeave={() => setContextMenu(null)}
+        >
+          <button
+            onClick={() => toggleNodeVisibility(contextMenu.nodeId)}
+            className="w-full px-4 py-2 text-left text-sm hover:bg-muted transition-colors flex items-center gap-2"
+          >
+            <span>👁️</span>
+            <span>Hide Node</span>
+          </button>
+        </div>
+      )}
 
       {/* Mini info */}
       <div className="absolute top-4 right-4 bg-background/90 border border-border rounded-lg shadow-lg px-3 py-2 text-sm backdrop-blur">

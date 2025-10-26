@@ -426,8 +426,6 @@ export function Dashboard() {
         </div>
       </div>
       
-      {/* Change Queue Panel - Bottom Left */}
-      <ChangeQueuePanel />
       
       {/* Research Report Modal */}
       {showProgressReport && currentProgressSessionId && (() => {
