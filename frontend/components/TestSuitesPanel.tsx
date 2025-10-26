@@ -15,9 +15,11 @@ export function TestSuitesPanel() {
     }))
   );
 
+  console.log('[TestSuitesPanel] ===== RENDER =====');
   console.log('[TestSuitesPanel] Render - testCollections:', testCollections);
   console.log('[TestSuitesPanel] All sessions:', allSessions);
   console.log('[TestSuitesPanel] Session count:', allSessions.length);
+  console.log('[TestSuitesPanel] First session testReport:', allSessions[0]?.testReport);
 
   const handleStartNewTest = () => {
     // Switch to Testing Suite panel to start a new test

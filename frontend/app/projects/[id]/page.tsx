@@ -10,8 +10,9 @@ import { StatusPanel } from '@/components/StatusPanel';
 import { DetailsPanel } from '@/components/DetailsPanel';
 import TestingPanel from '@/components/TestingPanel';
 import TestReportPanel from '@/components/TestReportPanel';
+import { TestSuitesPanel } from '@/components/TestSuitesPanel';
 import ChangeQueuePanel from '@/components/ChangeQueuePanel';
-import { Loader2, Database, Trash2, Activity, Beaker, ArrowLeft } from 'lucide-react';
+import { Loader2, Database, Trash2, Activity, Beaker, ArrowLeft, FileText } from 'lucide-react';
 import { Project } from '@/types/project';
 
 export default function ProjectDetailPage() {
@@ -20,7 +21,7 @@ export default function ProjectDetailPage() {
   
   const [project, setProject] = useState<Project | null>(null);
   const [projectLoading, setProjectLoading] = useState(true);
-  const [rightPanelView, setRightPanelView] = useState<'status' | 'testing' | 'report'>('status');
+  const [rightPanelView, setRightPanelView] = useState<'status' | 'testing' | 'report' | 'suites'>('status');
   
   const { 
     agentData, 
@@ -420,6 +421,17 @@ export default function ProjectDetailPage() {
             <Beaker className="w-4 h-4" />
             Testing Suite
           </button>
+          <button
+            onClick={() => setRightPanelView('suites')}
+            className={`flex-1 px-4 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+              rightPanelView === 'suites'
+                ? 'bg-background text-foreground border-b-2 border-primary'
+                : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            Test Suites
+          </button>
         </div>
 
         {/* Panel Content */}
@@ -427,6 +439,7 @@ export default function ProjectDetailPage() {
           {rightPanelView === 'status' && <StatusPanel />}
           {rightPanelView === 'testing' && <TestingPanel />}
           {rightPanelView === 'report' && <TestReportPanel />}
+          {rightPanelView === 'suites' && <TestSuitesPanel />}
         </div>
       </div>
       

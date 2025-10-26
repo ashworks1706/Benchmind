@@ -326,10 +326,18 @@ export const useStore = create<AppState>((set, get) => ({
   
   setShowReportModal: (show) => set({ showReportModal: show }),
   
-  setShowProgressReport: (show, sessionId) => set({ 
-    showProgressReport: show, 
-    currentProgressSessionId: sessionId || null 
-  }),
+  setShowProgressReport: (show, sessionId) => {
+    console.log('[Store] setShowProgressReport called:', { show, sessionId });
+    console.log('[Store] Current testCollections:', get().testCollections);
+    set({ 
+      showProgressReport: show, 
+      currentProgressSessionId: sessionId || null 
+    });
+    console.log('[Store] Updated state:', { 
+      showProgressReport: get().showProgressReport, 
+      currentProgressSessionId: get().currentProgressSessionId 
+    });
+  },
   
   loadFromLocalStorage: () => {
     console.log('[Store] loadFromLocalStorage called');

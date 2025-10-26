@@ -955,13 +955,23 @@ export function Canvas() {
       <SessionSelector />
 
       {/* Research Report Modal - Shows test session details with fix review */}
-      {showProgressReport && currentProgressSessionId && (() => {
+      {(() => {
+        console.log('[Canvas] Modal check - showProgressReport:', showProgressReport);
+        console.log('[Canvas] Modal check - currentProgressSessionId:', currentProgressSessionId);
+        console.log('[Canvas] Modal check - testCollections:', testCollections.length);
+        
+        if (!showProgressReport || !currentProgressSessionId) {
+          return null;
+        }
+        
         const session = testCollections
           .flatMap(c => c.testSessions || [])
           .find(s => s.id === currentProgressSessionId);
         
+        console.log('[Canvas] Research Report Modal - session found:', !!session);
         console.log('[Canvas] Research Report Modal - session:', session);
         console.log('[Canvas] testReport exists:', !!session?.testReport);
+        console.log('[Canvas] testReport value:', session?.testReport);
         
         if (!session) {
           console.log('[Canvas] No session found for ID:', currentProgressSessionId);
@@ -970,6 +980,7 @@ export function Canvas() {
         
         if (!session.testReport) {
           console.log('[Canvas] No testReport in session:', session.id);
+          console.log('[Canvas] Session keys:', Object.keys(session));
           return null;
         }
         
