@@ -4,6 +4,7 @@ import { useStore } from '@/lib/store';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { generateCompleteLatexReport } from '@/lib/latexGenerator';
+import { useRouter } from 'next/navigation';
 import { 
   BarChart3, 
   TrendingUp, 
@@ -22,7 +23,8 @@ import {
   Award,
   FileText,
   Download,
-  Copy
+  Copy,
+  ExternalLink
 } from 'lucide-react';
 import { useState } from 'react';
 import { useEffect } from 'react';
@@ -107,8 +109,44 @@ const METRIC_DEFINITIONS = {
 };
 
 export default function TestReportPanel() {
-  const { testReport, setPanelView, addStatusMessage, agentData, addQueuedChange, highlightElements, clearHighlights, highlightWarningElements } = useStore();
+  const router = useRouter();
+  const { testReport, setPanelView, addStatusMessage, agentData, addQueuedChange, highlightElements, clearHighlights, highlightWarningElements, testCollections, currentAnalysisId } = useStore();
   const [expandedMetric, setExpandedMetric] = useState<string | null>(null);
+
+  // Find current project ID from URL or state
+  const getCurrentProjectId = () => {
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname;
+      const match = path.match(/\/projects\/([^\/]+)/);
+      return match ? match[1] : null;
+    }
+    return null;
+  };
+
+  const handleViewFullReport = () => {
+    const projectId = getCurrentProjectId();
+    if (!projectId) {
+      addStatusMessage({
+        type: 'error',
+        message: 'Unable to determine project ID',
+      });
+      return;
+    }
+
+    // Find the session ID for this test report
+    const session = testCollections
+      .flatMap(c => c.testSessions || [])
+      .find(s => s.testReport === testReport);
+
+    if (session) {
+      router.push(`/projects/${projectId}/reports/${session.id}`);
+    } else {
+      addStatusMessage({
+        type: 'error',
+        message: 'Unable to find test session for this report',
+      });
+    }
+  };
 
   // Highlight elements with recommendations when report loads
   useEffect(() => {
@@ -336,9 +374,19 @@ export default function TestReportPanel() {
               Test Report
             </h3>
           </div>
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleViewFullReport}
+            className="bg-primary"
+          >
+            <FileText className="w-4 h-4 mr-2" />
+            View Full Report
+            <ExternalLink className="w-3 h-3 ml-2" />
+          </Button>
         </div>
         <p className="text-sm text-muted-foreground">
-          Comprehensive analysis of your AI agent system performance
+          Quick overview - Click &quot;View Full Report&quot; for complete research documentation
         </p>
       </div>
 

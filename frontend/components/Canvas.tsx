@@ -8,8 +8,8 @@ import { calculateAgentCost, calculateToolCost, calculateConnectionCost, formatC
 import { SessionSelector } from './SessionSelector';
 import { ResearchReportModal } from './ResearchReportModal';
 import { ObjectiveFocusPanel } from './ObjectiveFocusPanel';
-import { DocumentationModal } from './DocumentationModal';
 import { BookOpen } from 'lucide-react';
+import Link from 'next/link';
 
 interface CanvasNode {
   id: string;
@@ -70,7 +70,6 @@ export function Canvas() {
   const [fadingOutNodeIds, setFadingOutNodeIds] = useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
-  const [showDocumentation, setShowDocumentation] = useState(false);
 
   // Calculate cost multipliers from objective focus sliders
   const costMultipliers: CostMultipliers = useMemo(() => {
@@ -1654,22 +1653,18 @@ export function Canvas() {
 
       {/* Documentation Button - Bottom right, above Objective Focus */}
       <div className="fixed bottom-20 right-4 z-40">
-        <button
-          onClick={() => setShowDocumentation(true)}
-          className="bg-background border-2 border-primary/30 rounded-full p-3 shadow-lg hover:shadow-xl transition-all hover:border-primary/50 hover:scale-105"
-          title="Documentation & Guide"
-        >
-          <BookOpen className="w-6 h-6 text-primary" />
-        </button>
+        <Link href="/docs">
+          <button
+            className="bg-background border-2 border-primary/30 rounded-full p-3 shadow-lg hover:shadow-xl transition-all hover:border-primary/50 hover:scale-105"
+            title="Documentation & Guide"
+          >
+            <BookOpen className="w-6 h-6 text-primary" />
+          </button>
+        </Link>
       </div>
 
       {/* Objective Focus Control Panel */}
       <ObjectiveFocusPanel />
-
-      {/* Documentation Modal */}
-      {showDocumentation && (
-        <DocumentationModal onClose={() => setShowDocumentation(false)} />
-      )}
     </div>
   );
 }

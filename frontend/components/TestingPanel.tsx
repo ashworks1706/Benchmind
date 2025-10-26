@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import { apiService } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -17,6 +18,7 @@ import {
 } from 'lucide-react';
 
   export default function TestingPanel() {
+  const router = useRouter();
   const {
     agentData,
     testingSessionId,
@@ -332,10 +334,20 @@ import {
               });
             }
             
-            // Auto-open Progress Report Modal (forces user to review fixes)
+            // Auto-redirect to Progress Report page (forces user to review fixes)
             setTimeout(() => {
-              useStore.getState().setShowProgressReport(true, testingSessionId);
               useStore.getState().toggleSessionVisibility(testingSessionId); // Make session visible
+              
+              // Get current project ID from URL
+              if (typeof window !== 'undefined') {
+                const path = window.location.pathname;
+                const match = path.match(/\/projects\/([^\/]+)/);
+                const projectId = match ? match[1] : null;
+                
+                if (projectId) {
+                  router.push(`/projects/${projectId}/reports/${testingSessionId}`);
+                }
+              }
             }, 1000); // Delay to allow collection to be saved
           }
           

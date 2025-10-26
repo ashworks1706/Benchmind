@@ -17,6 +17,7 @@ from services.test_generator import TestGenerator
 from services.code_editor import CodeEditor
 from services.cache_manager import CacheManager
 from services.encryption import encrypt_token, decrypt_token
+from services.rag_service import get_rag_service
 
 from database import get_db, init_db
 from models import User, Project, Analysis, GitHubRepositoryCache, TestSession
@@ -290,6 +291,16 @@ def run_analysis_async(analysis_id, github_url, project_id=None):
         }
         
         logger.info(f"Analysis {analysis_id} completed successfully in {duration_ms}ms")
+        
+        # Index data into RAG system for searchability
+        try:
+            logger.info(f"Indexing analysis {analysis_id} into RAG system")
+            rag = get_rag_service()
+            counts = rag.index_agent_data(analysis_id, agent_data)
+            logger.info(f"Successfully indexed analysis {analysis_id}: {counts}")
+        except Exception as rag_error:
+            logger.error(f"Failed to index analysis into RAG: {str(rag_error)}", exc_info=True)
+            # Don't fail the analysis if RAG indexing fails
         
     except Exception as e:
         logger.error(f"Analysis {analysis_id} failed with error: {str(e)}", exc_info=True)
@@ -1386,6 +1397,21 @@ def create_test_session():
             db.commit()
             db.refresh(test_session)
             
+            # Index test report into RAG system for searchability
+            try:
+                logger.info(f"Indexing test report {test_session.id} into RAG system")
+                rag = get_rag_service()
+                count = rag.index_test_report(
+                    project_id=project_id,
+                    session_id=test_session.id,
+                    report=test_report or {},
+                    test_cases=test_cases or []
+                )
+                logger.info(f"Successfully indexed test report: {count} documents")
+            except Exception as rag_error:
+                logger.error(f"Failed to index test report into RAG: {str(rag_error)}", exc_info=True)
+                # Don't fail the test session creation if RAG indexing fails
+            
             return jsonify(test_session.to_dict()), 201
             
     except Exception as e:
@@ -1452,6 +1478,126 @@ def get_test_sessions_by_project(project_id):
             
     except Exception as e:
         logger.error(f"Error fetching test sessions: {str(e)}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+# ============================================================================
+# RAG Search Endpoints
+# ============================================================================
+
+@app.route('/api/search', methods=['POST'])
+def spotlight_search():
+    """
+    Spotlight-style search across all indexed knowledge.
+    Returns results with navigation URLs to specific page sections.
+    """
+    try:
+        data = request.get_json()
+        query = data.get('query', '').strip()
+        project_id = data.get('project_id')  # Optional filter
+        limit = data.get('limit', 10)
+        
+        if not query:
+            return jsonify({'results': []}), 200
+        
+        rag = get_rag_service()
+        results = rag.hybrid_search(
+            query=query,
+            project_id=project_id,
+            top_k=limit
+        )
+        
+        return jsonify({
+            'results': results,
+            'query': query,
+            'count': len(results)
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error in spotlight search: {str(e)}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/rag/index/analysis/<analysis_id>', methods=['POST'])
+def index_analysis_data(analysis_id):
+    """
+    Index agent analysis data into RAG system.
+    Called after analysis is complete.
+    """
+    try:
+        with get_db() as db:
+            analysis = db.query(Analysis).filter_by(id=analysis_id).first()
+            if not analysis:
+                return jsonify({'error': 'Analysis not found'}), 404
+            
+            rag = get_rag_service()
+            
+            # Index agent data
+            agent_data = analysis.data if analysis.data else {}
+            counts = rag.index_agent_data(analysis_id, agent_data)
+            
+            logger.info(f"Indexed analysis {analysis_id}: {counts}")
+            
+            return jsonify({
+                'success': True,
+                'analysis_id': analysis_id,
+                'indexed': counts
+            }), 200
+            
+    except Exception as e:
+        logger.error(f"Error indexing analysis: {str(e)}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/rag/index/report/<session_id>', methods=['POST'])
+def index_test_report(session_id):
+    """
+    Index test report into RAG system.
+    Called after tests are complete.
+    """
+    try:
+        with get_db() as db:
+            session = db.query(TestSession).filter_by(id=session_id).first()
+            if not session:
+                return jsonify({'error': 'Test session not found'}), 404
+            
+            rag = get_rag_service()
+            
+            # Index report data
+            report_data = session.results if session.results else {}
+            test_cases = session.test_cases if session.test_cases else []
+            
+            count = rag.index_test_report(
+                project_id=session.project_id,
+                session_id=session_id,
+                report=report_data,
+                test_cases=test_cases
+            )
+            
+            logger.info(f"Indexed test report {session_id}: {count} documents")
+            
+            return jsonify({
+                'success': True,
+                'session_id': session_id,
+                'documents_indexed': count
+            }), 200
+            
+    except Exception as e:
+        logger.error(f"Error indexing test report: {str(e)}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/rag/stats', methods=['GET'])
+def get_rag_stats():
+    """Get RAG database statistics."""
+    try:
+        rag = get_rag_service()
+        stats = rag.get_stats()
+        
+        return jsonify({
+            'success': True,
+            'stats': stats,
+            'total': sum(stats.values())
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting RAG stats: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':

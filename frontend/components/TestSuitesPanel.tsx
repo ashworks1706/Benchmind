@@ -1,12 +1,14 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { CheckCircle2, XCircle, AlertTriangle, FileText, Calendar, Plus } from 'lucide-react';
 
 export function TestSuitesPanel() {
-  const { testCollections, setShowProgressReport, setPanelView } = useStore();
+  const router = useRouter();
+  const { testCollections, setPanelView } = useStore();
 
   const allSessions = testCollections.flatMap(c => 
     (c.testSessions || []).map(session => ({
@@ -169,8 +171,17 @@ export function TestSuitesPanel() {
                   onClick={() => {
                     console.log('[TestSuitesPanel] Button clicked - sessionId:', session.id);
                     console.log('[TestSuitesPanel] Session data:', session);
-                    setShowProgressReport(true, session.id);
-                    console.log('[TestSuitesPanel] setShowProgressReport called');
+                    
+                    // Get current project ID from URL
+                    if (typeof window !== 'undefined') {
+                      const path = window.location.pathname;
+                      const match = path.match(/\/projects\/([^\/]+)/);
+                      const projectId = match ? match[1] : null;
+                      
+                      if (projectId) {
+                        router.push(`/projects/${projectId}/reports/${session.id}`);
+                      }
+                    }
                   }}
                   className="w-full"
                   variant={hasUnresolvedFixes ? 'default' : 'outline'}

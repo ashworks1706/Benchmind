@@ -345,87 +345,105 @@ IMPORTANT for highlight_elements:
         if not failed_metrics:
             return []
         
+        # Get actual target details from agent_data
+        target_id = target.get('id', '')
+        target_type = target.get('type', '')
+        target_name = target.get('name', 'Unknown')
+        
+        # Find the actual agent or tool in agent_data
+        actual_file_path = None
+        actual_code_snippet = None
+        
+        if target_type == 'agent':
+            agents = agent_data.get('agents', [])
+            matching_agent = next((a for a in agents if a.get('id') == target_id), None)
+            if matching_agent:
+                target_name = matching_agent.get('name', target_name)
+                # Use description as code context
+                actual_code_snippet = matching_agent.get('description', '')
+        elif target_type == 'tool':
+            tools = agent_data.get('tools', [])
+            matching_tool = next((t for t in tools if t.get('id') == target_id), None)
+            if matching_tool:
+                target_name = matching_tool.get('name', target_name)
+                actual_code_snippet = matching_tool.get('description', '')
+        
         # Generate recommendations based on category and failed metrics
         for metric in failed_metrics:
             metric_name = metric.get('name', '')
             value = metric.get('value', 0)
             benchmark = metric.get('benchmark', 100)
             
+            # Build context-aware recommendation
+            rec = {
+                'test_name': test_case.get('name', 'Unknown Test'),
+                'target_name': target_name,
+                'target_type': target_type,
+                'category': category,
+            }
+            
             if 'accuracy' in metric_name.lower():
-                recommendations.append({
+                rec.update({
                     'severity': 'high' if value < benchmark * 0.8 else 'medium',
-                    'category': category,
-                    'issue': f'{metric_name} is {value:.1f}%, below benchmark of {benchmark}%',
-                    'impact': f'Agent may make incorrect decisions or tool calls. This affects reliability by {benchmark - value:.1f}%',
-                    'fix': {
-                        'file_path': target.get('file_path', f'{target.get("id", "agent")}_config.py'),
-                        'line_number': 15,
-                        'current_code': f'# Current {target.get("type", "agent")} configuration\naccuracy_threshold = 0.7',
-                        'suggested_code': f'# Improved configuration with validation\naccuracy_threshold = 0.9\nvalidation_enabled = True',
-                        'explanation': f'Increase accuracy threshold and enable validation to improve {metric_name}'
-                    }
+                    'title': f'Improve {target_name} Accuracy',
+                    'description': f'{metric_name} is {value:.1f}%, below benchmark of {benchmark}%. This may cause incorrect decisions or tool calls.',
+                    'file_path': f'agents/{target_id.replace("_", "-")}.py' if target_type == 'agent' else f'tools/{target_id.replace("_", "-")}.py',
+                    'current_code': f'# {target_name}\n# Current configuration may need accuracy improvements\n# Context: {actual_code_snippet[:100] if actual_code_snippet else "Configuration not found"}...',
+                    'suggested_code': f'# {target_name} - Enhanced Configuration\n# Add validation and error checking\n# Implement accuracy monitoring\n# Consider adding confidence thresholds',
                 })
             
             elif 'response_time' in metric_name.lower() or 'time' in metric_name.lower():
-                recommendations.append({
+                rec.update({
                     'severity': 'medium' if value < benchmark * 2 else 'high',
-                    'category': category,
-                    'issue': f'{metric_name} is {value:.1f}ms, exceeding benchmark of {benchmark}ms',
-                    'impact': f'Slow response affects user experience. {value - benchmark:.1f}ms over target',
-                    'fix': {
-                        'file_path': target.get('file_path', f'{target.get("id", "agent")}_config.py'),
-                        'line_number': 20,
-                        'current_code': '# Performance configuration\nmax_iterations = 10',
-                        'suggested_code': '# Optimized performance\nmax_iterations = 5\ncache_enabled = True',
-                        'explanation': 'Reduce iterations and enable caching to improve response time'
-                    }
+                    'title': f'Optimize {target_name} Performance',
+                    'description': f'{metric_name} is {value:.1f}ms, exceeding benchmark of {benchmark}ms by {value - benchmark:.1f}ms. This affects user experience.',
+                    'file_path': f'agents/{target_id.replace("_", "-")}.py' if target_type == 'agent' else f'tools/{target_id.replace("_", "-")}.py',
+                    'current_code': f'# {target_name}\n# Current implementation may have performance bottlenecks',
+                    'suggested_code': f'# {target_name} - Performance Optimizations\n# 1. Enable response caching\n# 2. Reduce unnecessary iterations\n# 3. Optimize API calls\n# 4. Consider async operations',
                 })
             
             elif 'reasoning' in metric_name.lower():
-                recommendations.append({
+                rec.update({
                     'severity': 'high',
-                    'category': category,
-                    'issue': f'{metric_name} is {value:.1f}%, below benchmark of {benchmark}%',
-                    'impact': 'Poor reasoning quality leads to incorrect outputs and degraded user trust',
-                    'fix': {
-                        'file_path': target.get('file_path', f'{target.get("id", "agent")}_prompt.txt'),
-                        'line_number': 5,
-                        'current_code': 'You are an AI assistant.',
-                        'suggested_code': 'You are an AI assistant. Think step-by-step and explain your reasoning clearly before providing answers.',
-                        'explanation': 'Add chain-of-thought prompting to improve reasoning quality'
-                    }
+                    'title': f'Enhance {target_name} Reasoning Quality',
+                    'description': f'{metric_name} is {value:.1f}%, below benchmark of {benchmark}%. Poor reasoning leads to incorrect outputs and reduced user trust.',
+                    'file_path': f'agents/{target_id.replace("_", "-")}-prompt.txt' if target_type == 'agent' else f'tools/{target_id.replace("_", "-")}.py',
+                    'current_code': f'# {target_name} prompt/logic\n# Current reasoning approach may be too simplistic',
+                    'suggested_code': f'# {target_name} - Improved Reasoning\n# Add chain-of-thought prompting\n# Include step-by-step reasoning\n# Validate logic before responding\n# Add confidence scoring',
                 })
             
-            elif 'collaboration' in metric_name.lower():
-                recommendations.append({
+            elif 'collaboration' in metric_name.lower() or 'handoff' in metric_name.lower():
+                rec.update({
                     'severity': 'medium',
-                    'category': category,
-                    'issue': f'{metric_name} is {value:.1f}%, below benchmark of {benchmark}%',
-                    'impact': 'Inefficient inter-agent communication leads to slower task completion',
-                    'fix': {
-                        'file_path': target.get('file_path', f'{target.get("id", "agent")}_config.py'),
-                        'line_number': 25,
-                        'current_code': '# Collaboration settings\nshare_context = False',
-                        'suggested_code': '# Enhanced collaboration\nshare_context = True\ncontext_window = 5',
-                        'explanation': 'Enable context sharing between agents to improve collaboration'
-                    }
+                    'title': f'Improve {target_name} Collaboration',
+                    'description': f'{metric_name} is {value:.1f}%, below benchmark of {benchmark}%. Inefficient inter-agent communication slows task completion.',
+                    'file_path': f'agents/{target_id.replace("_", "-")}.py',
+                    'current_code': f'# {target_name}\n# Current collaboration settings may be limited',
+                    'suggested_code': f'# {target_name} - Enhanced Collaboration\n# Enable context sharing with other agents\n# Improve handoff protocols\n# Add collaboration metrics tracking\n# Optimize message passing',
+                })
+            
+            elif 'tool_calling' in metric_name.lower() or 'tool' in metric_name.lower():
+                rec.update({
+                    'severity': 'high' if value < benchmark * 0.7 else 'medium',
+                    'title': f'Fix {target_name} Tool Usage',
+                    'description': f'{metric_name} is {value:.1f}%, below benchmark of {benchmark}%. Incorrect tool usage leads to task failures.',
+                    'file_path': f'agents/{target_id.replace("_", "-")}.py',
+                    'current_code': f'# {target_name}\n# Tool calling logic needs improvement',
+                    'suggested_code': f'# {target_name} - Better Tool Integration\n# Add tool validation before calling\n# Implement retry logic for failed calls\n# Add tool usage examples in prompts\n# Monitor tool success rates',
                 })
             
             else:
-                # Generic recommendation
-                recommendations.append({
+                # Specific recommendation based on metric
+                rec.update({
                     'severity': 'medium',
-                    'category': category,
-                    'issue': f'{metric_name} needs improvement (current: {value:.1f}, target: {benchmark})',
-                    'impact': f'Performance gap of {benchmark - value:.1f} points may affect overall system quality',
-                    'fix': {
-                        'file_path': target.get('file_path', f'{target.get("id", "component")}_config.py'),
-                        'line_number': 10,
-                        'current_code': '# Configuration',
-                        'suggested_code': '# Optimized configuration with monitoring',
-                        'explanation': f'Review and optimize {metric_name} configuration'
-                    }
+                    'title': f'Optimize {target_name} - {metric_name}',
+                    'description': f'{metric_name} needs improvement (current: {value:.1f}, target: {benchmark}). Gap of {abs(benchmark - value):.1f} points affects system quality.',
+                    'file_path': f'{target_type}s/{target_id.replace("_", "-")}.py',
+                    'current_code': f'# {target_name}\n# Review {metric_name} implementation',
+                    'suggested_code': f'# {target_name} - {metric_name} Improvements\n# Analyze and optimize this metric\n# Add monitoring and alerts\n# Consider performance profiling',
                 })
+            
+            recommendations.append(rec)
         
         return recommendations
     
