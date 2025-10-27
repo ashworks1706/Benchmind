@@ -1,4 +1,4 @@
-# AI Agent Testing Framework
+# AI Agent Benchmarking and Debugging Framework
 
 An interactive web application that constructs an AI Agent visual editor from LangChain-based AI agent codebases by scraping GitHub repositories. Test, analyze, and improve your AI agents with comprehensive automated testing and real-time visualization.
 
