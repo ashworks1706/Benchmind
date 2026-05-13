@@ -1,4 +1,6 @@
-# Benchmind: Repository-Native AI Agent Analysis and Benchmarking Workspace
+# Benchmind: Agent Analysis and Benchmarking Workspace
+
+https://github.com/user-attachments/assets/25a05369-408b-46c0-a8ac-070ea0ac7d54
 
 Benchmind is a full-stack workspace for analyzing and stress-testing LangChain-style agent repositories from GitHub, then turning those analyses into structured test sessions, benchmark reports, and fix recommendations. It is designed for engineers who need to inspect how an agent system is wired, run repeatable quality/performance/security-oriented evaluations, and review actionable remediation suggestions in one place. The system combines repository scraping, LLM-assisted structure extraction, simulated test execution, persistent project/session storage, and hybrid semantic search over analyses and reports.
 
