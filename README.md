@@ -14,7 +14,7 @@ At runtime, Benchmind behaves as an asynchronous pipeline rather than a single r
 
 The architecture is retrieval-and-structure first, then evaluation. Instead of benchmarking a raw chat endpoint directly, Benchmind benchmarks an extracted representation of a multi-agent system, which makes it useful for architecture review and iterative tuning workflows.
 
-## What BenchMind Measures
+## What Benchmind Measures
 
 Benchmind produces test outputs and report summaries around categories such as tool calling, reasoning, collaboration, relationship behavior, performance, error handling, and security-oriented checks. Generated tests include explicit benchmark fields and pass/fail logic, and report generation computes aggregate summaries, category averages, and recommendation bundles suitable for review sessions.
 
