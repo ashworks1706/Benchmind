@@ -2,6 +2,12 @@
 
 An interactive web application that constructs an AI Agent visual editor from LangChain-based AI agent codebases by scraping GitHub repositories. Test, analyze, and improve your AI agents with comprehensive automated testing and real-time visualization.
 
+
+
+https://github.com/user-attachments/assets/25a05369-408b-46c0-a8ac-070ea0ac7d54
+
+
+
 ## ✨ New: Docker One-Command Startup + RAG Search!
 
 🐳 **Get everything running in seconds:**
